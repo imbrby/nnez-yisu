@@ -121,16 +121,11 @@ class AppLogService {
   }
 
   Future<Directory> _resolveLogDirectory() async {
-    try {
-      final external = await getExternalStorageDirectory();
-      if (external != null) {
-        return Directory(path.join(external.path, 'logs'));
-      }
-    } catch (_) {
-      // fallback to internal documents directory
+    final external = await getExternalStorageDirectory();
+    if (external == null) {
+      throw StateError('无法获取外部私有目录。');
     }
-    final internal = await getApplicationDocumentsDirectory();
-    return Directory(path.join(internal.path, 'logs'));
+    return Directory(path.join(external.path, 'logs'));
   }
 
   Future<void> _enqueue(Future<void> Function() action) {

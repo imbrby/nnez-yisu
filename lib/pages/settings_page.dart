@@ -1,10 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_app/core/time_utils.dart';
 import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/services/app_log_service.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -23,7 +19,6 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = profile;
-    final logPath = AppLogService.instance.logPath ?? '日志未初始化';
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: <Widget>[
@@ -96,87 +91,6 @@ class SettingsPage extends StatelessWidget {
                       ),
                     ],
                   ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  '日志文件',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SelectableText(
-                  logPath,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Clipboard.setData(ClipboardData(text: logPath));
-                        if (!context.mounted) {
-                          return;
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('日志路径已复制')),
-                        );
-                      },
-                      icon: const Icon(Icons.copy),
-                      label: const Text('复制路径'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final text = await AppLogService.instance.readRecent(
-                          maxLines: 300,
-                        );
-                        await Clipboard.setData(
-                          ClipboardData(text: text.isEmpty ? '日志为空' : text),
-                        );
-                        if (!context.mounted) {
-                          return;
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('最近日志已复制')),
-                        );
-                      },
-                      icon: const Icon(Icons.description_outlined),
-                      label: const Text('复制最近日志'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final messenger = ScaffoldMessenger.of(context);
-                        unawaited(
-                          AppLogService.instance.clear().then((_) {
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text('日志已清空')),
-                            );
-                          }),
-                        );
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('清空日志'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ),
         ),
         const SizedBox(height: 12),

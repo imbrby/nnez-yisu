@@ -14,8 +14,12 @@ import 'package:mobile_app/services/local_storage_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppLogService.instance.init();
-  await AppLogService.instance.info('应用启动', tag: 'BOOT');
+  try {
+    await AppLogService.instance.init();
+    await AppLogService.instance.info('应用启动', tag: 'BOOT');
+  } catch (_) {
+    // Keep app startup resilient even if log file initialization fails.
+  }
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
