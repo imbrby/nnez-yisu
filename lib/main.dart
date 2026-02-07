@@ -52,7 +52,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-  static const bool _safeModeDisableAutoTasks = true;
+  static const bool _safeModeDisableAutoTasks = false;
 
   final TextEditingController _sidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -88,10 +88,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      if (_safeModeDisableAutoTasks) {
-        return;
-      }
+    if (state == AppLifecycleState.resumed && !_safeModeDisableAutoTasks) {
       _autoSyncIfNeeded();
     }
   }
@@ -144,8 +141,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           _booting = false;
         });
       }
+      unawaited(_reloadSummarySafe());
       if (!_safeModeDisableAutoTasks) {
-        unawaited(_reloadSummarySafe());
         unawaited(_autoSyncIfNeeded(showLastSyncWhenNoAction: true));
       }
     }
@@ -253,12 +250,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       }
       return;
     }
-    await _syncNow(auto: true, includeTransactions: false);
+    await _syncNow(auto: true, includeTransactions: true, lookbackDays: 2);
   }
 
   Future<void> _syncNow({
     required bool auto,
     bool includeTransactions = false,
+    int? lookbackDays,
   }) async {
     final repo = _repository;
     if (repo == null || !repo.hasCredential || _settingUp || _syncing) {
@@ -276,6 +274,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       await repo
           .syncNow(
             includeTransactions: includeTransactions,
+            lookbackDays: lookbackDays,
             onProgress: (message) {
               if (!mounted) {
                 return;
@@ -288,25 +287,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           .timeout(
             Duration(seconds: includeTransactions ? 120 : 40),
             onTimeout: () {
-              throw TimeoutException(
-                auto
-                    ? (includeTransactions ? '自动刷新超时，稍后可手动重试。' : '快速刷新超时，稍后重试。')
-                    : '刷新超时，请稍后重试。',
-              );
+              throw TimeoutException(auto ? '自动刷新超时，稍后可手动重试。' : '刷新超时，请稍后重试。');
             },
           );
       if (!mounted) {
         return;
       }
       _profile = repo.profile;
-      if (includeTransactions) {
-        await _reloadSummarySafe(month: _summary?.selectedMonth);
-      }
+      await _reloadSummarySafe(month: _summary?.selectedMonth);
       if (!mounted) {
         return;
       }
       setState(() {
-        _status = includeTransactions ? '刷新完成。' : '快速刷新完成。';
+        _status = '刷新完成。';
       });
     } catch (error) {
       if (!mounted) {
@@ -541,7 +534,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           ? FloatingActionButton.extended(
               onPressed: (_syncing || _settingUp)
                   ? null
-                  : () => _syncNow(auto: false, includeTransactions: false),
+                  : () => _syncNow(auto: false, includeTransactions: true),
               icon: _syncing
                   ? const SizedBox(
                       width: 20,
