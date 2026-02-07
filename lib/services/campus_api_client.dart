@@ -18,100 +18,114 @@ class CampusApiClient {
     required String startDate,
     required String endDate,
   }) async {
-    final cookieJar = CookieJar();
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        responseType: ResponseType.plain,
-      ),
-    );
-    dio.interceptors.add(CookieManager(cookieJar));
+    try {
+      final cookieJar = CookieJar();
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          responseType: ResponseType.plain,
+        ),
+      );
+      dio.interceptors.add(CookieManager(cookieJar));
 
-    await dio.get<void>(
-      '/mobile/login',
-      options: Options(
-        headers: <String, String>{'accept': 'text/html,application/xhtml+xml'},
-      ),
-    );
+      await dio.get<void>(
+        '/mobile/login',
+        options: Options(
+          headers: <String, String>{
+            'accept': 'text/html,application/xhtml+xml',
+          },
+        ),
+      );
 
-    final bootCookies = await cookieJar.loadForRequest(
-      Uri.parse('$_baseUrl/mobile/login'),
-    );
-    final hasSession = bootCookies.any(
-      (cookie) => cookie.name == 'ASP.NET_SessionId',
-    );
-    if (!hasSession) {
-      throw Exception('未获取到 ASP.NET_SessionId，会话初始化失败。');
+      final bootCookies = await cookieJar.loadForRequest(
+        Uri.parse('$_baseUrl/mobile/login'),
+      );
+      final hasSession = bootCookies.any(
+        (cookie) => cookie.name == 'ASP.NET_SessionId',
+      );
+      if (!hasSession) {
+        throw Exception('未获取到 ASP.NET_SessionId，会话初始化失败。');
+      }
+
+      await _waitRandom(280, 760);
+
+      await _postForm(dio, '/interface/index', <String, String>{
+        'method': 'loginauthtype',
+      }, refererPath: '/mobile/login');
+
+      await _waitRandom(500, 1200);
+
+      final verifyResp = await _get(
+        dio,
+        '/interface/getVerifyCode?${Random().nextDouble()}',
+        refererPath: '/mobile/login',
+        accept:
+            'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      );
+      if (verifyResp.statusCode != 200) {
+        throw Exception('验证码会话初始化失败 (${verifyResp.statusCode ?? 0})');
+      }
+
+      final encodedPassword = base64Encode(utf8.encode(plainPassword));
+
+      final loginResp = await _postForm(
+        dio,
+        '/interface/login',
+        <String, String>{
+          'sid': sid,
+          'passWord': encodedPassword,
+          'verifycode': '',
+          'ismobile': '1',
+        },
+        refererPath: '/mobile/login',
+      );
+      final loginJson = _decodeJson(loginResp.data);
+      if (loginResp.statusCode != 200) {
+        throw Exception('登录请求失败 (${loginResp.statusCode ?? 0})');
+      }
+      if (!_isSuccess(loginJson)) {
+        throw Exception('登录失败：${_extractMessage(loginJson)}');
+      }
+
+      await _waitRandom(600, 1500);
+
+      final recordsResp =
+          await _postForm(dio, '/interface/index', <String, String>{
+            'method': 'getecardxfmx',
+            'stuid': '1',
+            'carno': sid,
+            'starttime': startDate,
+            'endtime': endDate,
+          }, refererPath: '/mobile/yktxfjl');
+      final recordsJson = _decodeJson(recordsResp.data);
+      if (recordsResp.statusCode != 200) {
+        throw Exception('查询流水失败 (${recordsResp.statusCode ?? 0})');
+      }
+      final rawData = recordsJson['data'];
+      if (!_isSuccess(recordsJson) || rawData is! List) {
+        throw Exception('查询流水失败：${_extractMessage(recordsJson)}');
+      }
+
+      await _waitRandom(180, 500);
+
+      final balance = await _fetchBalance(dio, sid);
+      final profile = await _fetchProfile(dio);
+      final rows = _toRecords(sid: sid, rawList: rawData);
+
+      return CampusSyncPayload(
+        profile: profile,
+        transactions: rows,
+        balance: balance,
+        balanceUpdatedAt: DateTime.now(),
+      );
+    } on DioException catch (error) {
+      throw Exception(_formatDioError(error));
+    } on FormatException {
+      throw Exception('服务器返回数据格式异常，请稍后重试。');
     }
-
-    await _waitRandom(280, 760);
-
-    await _postForm(dio, '/interface/index', <String, String>{
-      'method': 'loginauthtype',
-    }, refererPath: '/mobile/login');
-
-    await _waitRandom(500, 1200);
-
-    final verifyResp = await _get(
-      dio,
-      '/interface/getVerifyCode?${Random().nextDouble()}',
-      refererPath: '/mobile/login',
-      accept:
-          'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    );
-    if (verifyResp.statusCode != 200) {
-      throw Exception('验证码会话初始化失败 (${verifyResp.statusCode ?? 0})');
-    }
-
-    final encodedPassword = base64Encode(utf8.encode(plainPassword));
-
-    final loginResp = await _postForm(dio, '/interface/login', <String, String>{
-      'sid': sid,
-      'passWord': encodedPassword,
-      'verifycode': '',
-      'ismobile': '1',
-    }, refererPath: '/mobile/login');
-    final loginJson = _decodeJson(loginResp.data);
-    if (loginResp.statusCode != 200) {
-      throw Exception('登录请求失败 (${loginResp.statusCode ?? 0})');
-    }
-    if (!_isSuccess(loginJson)) {
-      throw Exception('登录失败：${_extractMessage(loginJson)}');
-    }
-
-    await _waitRandom(600, 1500);
-
-    final recordsResp =
-        await _postForm(dio, '/interface/index', <String, String>{
-          'method': 'getecardxfmx',
-          'stuid': '1',
-          'carno': sid,
-          'starttime': startDate,
-          'endtime': endDate,
-        }, refererPath: '/mobile/yktxfjl');
-    final recordsJson = _decodeJson(recordsResp.data);
-    if (recordsResp.statusCode != 200) {
-      throw Exception('查询流水失败 (${recordsResp.statusCode ?? 0})');
-    }
-    final rawData = recordsJson['data'];
-    if (!_isSuccess(recordsJson) || rawData is! List) {
-      throw Exception('查询流水失败：${_extractMessage(recordsJson)}');
-    }
-
-    await _waitRandom(180, 500);
-
-    final balance = await _fetchBalance(dio, sid);
-    final profile = await _fetchProfile(dio);
-    final rows = _toRecords(sid: sid, rawList: rawData);
-
-    return CampusSyncPayload(
-      profile: profile,
-      transactions: rows,
-      balance: balance,
-      balanceUpdatedAt: DateTime.now(),
-    );
   }
 
   Future<Response<String>> _postForm(
@@ -288,5 +302,23 @@ class CampusApiClient {
   Future<void> _waitRandom(int minMs, int maxMs) async {
     final value = minMs + Random().nextInt(maxMs - minMs + 1);
     await Future<void>.delayed(Duration(milliseconds: value));
+  }
+
+  String _formatDioError(DioException error) {
+    if (error.type == DioExceptionType.connectionTimeout) {
+      return '连接超时，请检查网络后重试。';
+    }
+    if (error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return '请求超时，请稍后重试。';
+    }
+    if (error.type == DioExceptionType.connectionError) {
+      return '网络连接失败，请检查网络后重试。';
+    }
+    final statusCode = error.response?.statusCode;
+    if (statusCode != null) {
+      return '网络请求失败（HTTP $statusCode）。';
+    }
+    return '网络请求失败，请稍后重试。';
   }
 }

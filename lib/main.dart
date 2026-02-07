@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/time_utils.dart';
 import 'package:mobile_app/models/campus_profile.dart';
@@ -98,7 +100,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _repository = repo;
       _profile = repo.profile;
       await _reloadSummary();
-      await _autoSyncIfNeeded(showLastSyncWhenNoAction: true);
+      if (repo.lastSyncAt != null && _status.isEmpty) {
+        setState(() {
+          _status = '上次同步：${formatDateTime(repo.lastSyncAt)}';
+        });
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -112,6 +118,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           _booting = false;
         });
       }
+      unawaited(_autoSyncIfNeeded(showLastSyncWhenNoAction: true));
     }
   }
 
@@ -161,7 +168,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     });
 
     try {
-      await repo.syncNow();
+      await repo.syncNow().timeout(
+        const Duration(seconds: 90),
+        onTimeout: () {
+          throw TimeoutException(auto ? '自动刷新超时，稍后可手动重试。' : '刷新超时，请稍后重试。');
+        },
+      );
       if (!mounted) {
         return;
       }
@@ -210,7 +222,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     });
 
     try {
-      await repo.initializeAccount(sid: sid, password: password);
+      await repo
+          .initializeAccount(sid: sid, password: password)
+          .timeout(
+            const Duration(seconds: 90),
+            onTimeout: () {
+              throw TimeoutException('初始化超时，请检查网络后重试。');
+            },
+          );
       if (!mounted) {
         return;
       }
@@ -280,7 +299,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   String _formatError(Object error) {
     final text = error.toString();
-    return text.replaceFirst(RegExp(r'^Exception:\s*'), '');
+    return text.replaceFirst(RegExp(r'^(Exception|TimeoutException):\s*'), '');
   }
 
   @override
@@ -310,7 +329,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('食堂消费')),
       body: Stack(
         children: <Widget>[
           body,
