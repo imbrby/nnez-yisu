@@ -36,10 +36,38 @@ class CanteenRepository {
     required String sid,
     required String password,
     void Function(String message)? onProgress,
+    bool localOnly = true,
   }) async {
     final normalizedSid = sid.trim();
     if (normalizedSid.isEmpty || password.isEmpty) {
       throw Exception('请输入食堂账号和密码。');
+    }
+
+    onProgress?.call('正在保存账号信息...');
+    await _runTimed(
+      () => _storage.saveCredentials(sid: normalizedSid, password: password),
+      '保存账号信息超时',
+    );
+    if (localOnly) {
+      final placeholder = CampusProfile(
+        sid: normalizedSid,
+        idCode: normalizedSid,
+        studentName: '未同步用户',
+        gradeName: '',
+        className: '',
+        academyName: '',
+        specialityName: '',
+      );
+      await _runTimed(() => _storage.saveProfile(placeholder), '保存用户信息超时');
+      await _runTimed(() {
+        return _storage.saveSyncMeta(
+          balance: 0,
+          balanceUpdatedAt: '',
+          lastSyncAt: '',
+          lastSyncDay: '',
+        );
+      }, '保存同步状态超时');
+      return;
     }
 
     final range = _buildSyncRange(_initCheckLookbackDays);
@@ -50,12 +78,6 @@ class CanteenRepository {
       endDate: range.endDate,
       includeTransactions: false,
       onProgress: onProgress,
-    );
-
-    onProgress?.call('正在保存账号信息...');
-    await _runTimed(
-      () => _storage.saveCredentials(sid: normalizedSid, password: password),
-      '保存账号信息超时',
     );
     await _runTimed(() => _storage.saveProfile(payload.profile), '保存用户信息超时');
     await _runTimed(() {

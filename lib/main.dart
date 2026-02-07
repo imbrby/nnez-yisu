@@ -337,6 +337,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           .initializeAccount(
             sid: sid,
             password: password,
+            localOnly: true,
             onProgress: (message) {
               if (!mounted) {
                 return;
@@ -347,7 +348,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             },
           )
           .timeout(
-            const Duration(seconds: 70),
+            const Duration(seconds: 25),
             onTimeout: () {
               throw TimeoutException('初始化超时，请检查网络后重试。');
             },
@@ -363,7 +364,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _sidController.clear();
       _passwordController.clear();
       setState(() {
-        _status = '初始化完成。可进入主页，稍后点右下角刷新同步消费记录。';
+        _status = '初始化完成（已跳过远程校验）。请进入主页后点右下角刷新同步。';
       });
     } catch (error) {
       if (!mounted) {
@@ -597,7 +598,7 @@ class _SetupOverlay extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '首次使用请填写食堂账号和原密码。初始化后可先使用，再手动刷新消费记录。',
+                      '首次使用请填写食堂账号和原密码。当前版本初始化仅保存本地账号，远程同步请在主页手动刷新。',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     if (statusMessage.isNotEmpty) ...<Widget>[

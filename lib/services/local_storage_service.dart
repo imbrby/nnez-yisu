@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:mobile_app/models/campus_profile.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 class LocalStorageService {
-  LocalStorageService._(this._prefs);
+  LocalStorageService._(this._file, this._cache);
 
-  final SharedPreferences _prefs;
+  final File _file;
+  final Map<String, dynamic> _cache;
 
   static const _sidKey = 'campus_sid';
   static const _passwordKey = 'campus_password';
@@ -18,8 +21,21 @@ class LocalStorageService {
   static const _selectedMonthKey = 'selected_month';
 
   static Future<LocalStorageService> create() async {
-    final prefs = await SharedPreferences.getInstance();
-    return LocalStorageService._(prefs);
+    final baseDir = await getApplicationDocumentsDirectory();
+    final file = File(path.join(baseDir.path, 'app_state.json'));
+    Map<String, dynamic> cache = <String, dynamic>{};
+    if (await file.exists()) {
+      try {
+        final raw = await file.readAsString();
+        final parsed = jsonDecode(raw);
+        if (parsed is Map<String, dynamic>) {
+          cache = parsed;
+        }
+      } catch (_) {
+        cache = <String, dynamic>{};
+      }
+    }
+    return LocalStorageService._(file, cache);
   }
 
   bool get hasCredential {
@@ -27,73 +43,99 @@ class LocalStorageService {
   }
 
   String get campusSid {
-    return _prefs.getString(_sidKey) ?? '';
+    return (_cache[_sidKey] ?? '').toString();
   }
 
   String get campusPassword {
-    return _prefs.getString(_passwordKey) ?? '';
+    return (_cache[_passwordKey] ?? '').toString();
   }
 
   String get selectedMonth {
-    return _prefs.getString(_selectedMonthKey) ?? '';
+    return (_cache[_selectedMonthKey] ?? '').toString();
   }
 
   Future<void> saveSelectedMonth(String month) {
-    return _prefs.setString(_selectedMonthKey, month);
+    _cache[_selectedMonthKey] = month;
+    return _persist();
   }
 
   Future<void> saveCredentials({
     required String sid,
     required String password,
   }) async {
-    await _prefs.setString(_sidKey, sid.trim());
-    await _prefs.setString(_passwordKey, password);
+    _cache[_sidKey] = sid.trim();
+    _cache[_passwordKey] = password;
+    await _persist();
   }
 
-  Future<void> saveProfile(CampusProfile profile) {
-    final jsonString = jsonEncode(profile.toJson());
-    return _prefs.setString(_profileKey, jsonString);
+  Future<void> saveProfile(CampusProfile profile) async {
+    _cache[_profileKey] = profile.toJson();
+    await _persist();
   }
 
   CampusProfile? get profile {
-    final jsonString = _prefs.getString(_profileKey);
-    if (jsonString == null || jsonString.isEmpty) {
+    final value = _cache[_profileKey];
+    if (value == null) {
       return null;
     }
     try {
-      final map = jsonDecode(jsonString) as Map<String, dynamic>;
-      return CampusProfile.fromJson(map);
+      if (value is Map<String, dynamic>) {
+        return CampusProfile.fromJson(value);
+      }
+      if (value is String && value.isNotEmpty) {
+        final parsed = jsonDecode(value);
+        if (parsed is Map<String, dynamic>) {
+          return CampusProfile.fromJson(parsed);
+        }
+      }
     } catch (_) {
       return null;
     }
+    return null;
+  }
+
+  double? _readDouble(String key) {
+    final value = _cache[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    final parsed = double.tryParse(value.toString());
+    return parsed;
+  }
+
+  String? _readNonEmptyString(String key) {
+    final value = _cache[key];
+    if (value == null) {
+      return null;
+    }
+    final text = value.toString();
+    if (text.isEmpty) {
+      return null;
+    }
+    return text;
+  }
+
+  Future<void> _persist() async {
+    await _file.writeAsString(jsonEncode(_cache), flush: true);
   }
 
   double? get currentBalance {
-    return _prefs.getDouble(_balanceKey);
+    return _readDouble(_balanceKey);
   }
 
   String? get balanceUpdatedAt {
-    final value = _prefs.getString(_balanceUpdatedAtKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
+    return _readNonEmptyString(_balanceUpdatedAtKey);
   }
 
   String? get lastSyncAt {
-    final value = _prefs.getString(_lastSyncAtKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
+    return _readNonEmptyString(_lastSyncAtKey);
   }
 
   String? get lastSyncDay {
-    final value = _prefs.getString(_lastSyncDayKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
+    return _readNonEmptyString(_lastSyncDayKey);
   }
 
   Future<void> saveSyncMeta({
@@ -102,20 +144,23 @@ class LocalStorageService {
     required String lastSyncAt,
     required String lastSyncDay,
   }) async {
-    await _prefs.setDouble(_balanceKey, balance);
-    await _prefs.setString(_balanceUpdatedAtKey, balanceUpdatedAt);
-    await _prefs.setString(_lastSyncAtKey, lastSyncAt);
-    await _prefs.setString(_lastSyncDayKey, lastSyncDay);
+    _cache[_balanceKey] = balance;
+    _cache[_balanceUpdatedAtKey] = balanceUpdatedAt;
+    _cache[_lastSyncAtKey] = lastSyncAt;
+    _cache[_lastSyncDayKey] = lastSyncDay;
+    await _persist();
   }
 
   Future<void> clearAll() async {
-    await _prefs.remove(_sidKey);
-    await _prefs.remove(_passwordKey);
-    await _prefs.remove(_profileKey);
-    await _prefs.remove(_balanceKey);
-    await _prefs.remove(_balanceUpdatedAtKey);
-    await _prefs.remove(_lastSyncAtKey);
-    await _prefs.remove(_lastSyncDayKey);
-    await _prefs.remove(_selectedMonthKey);
+    _cache
+      ..remove(_sidKey)
+      ..remove(_passwordKey)
+      ..remove(_profileKey)
+      ..remove(_balanceKey)
+      ..remove(_balanceUpdatedAtKey)
+      ..remove(_lastSyncAtKey)
+      ..remove(_lastSyncDayKey)
+      ..remove(_selectedMonthKey);
+    await _persist();
   }
 }
