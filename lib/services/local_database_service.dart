@@ -93,7 +93,6 @@ class LocalDatabaseService {
       processed = end;
       _logInfo('upsert chunk committed $processed/${rows.length}');
       onProgress?.call('正在写入本地数据...$processed/${rows.length}');
-      await Future<void>.delayed(Duration.zero);
     }
     _logInfo('upsert done sid=$sid rows=${rows.length}');
   }

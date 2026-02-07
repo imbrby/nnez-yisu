@@ -127,22 +127,41 @@ class CanteenRepository {
       onProgress: onProgress,
     );
 
-    await _storage.saveProfile(payload.profile);
+    _logInfo('syncNow fetched payload txns=${payload.transactions.length}');
+    await _withTimeout(
+      () => _storage.saveProfile(payload.profile),
+      step: 'sync.saveProfile',
+      timeout: const Duration(seconds: 6),
+    );
     if (includeTransactions) {
-      await _database.init();
+      await _withTimeout(
+        () => _database.init(),
+        step: 'sync.db.init',
+        timeout: const Duration(seconds: 8),
+      );
       onProgress?.call('正在写入本地数据...');
-      await _database.upsertTransactions(
-        sid,
-        payload.transactions,
-        onProgress: onProgress,
+      await _withTimeout(
+        () => _database.upsertTransactions(
+          sid,
+          payload.transactions,
+          onProgress: onProgress,
+        ),
+        step: 'sync.db.upsertTransactions',
+        timeout: const Duration(seconds: 20),
       );
     }
-    await _storage.saveSyncMeta(
-      balance: payload.balance,
-      balanceUpdatedAt: payload.balanceUpdatedAt.toIso8601String(),
-      lastSyncAt: DateTime.now().toIso8601String(),
-      lastSyncDay: formatShanghaiDay(shanghaiNow()),
+    onProgress?.call('正在保存同步信息...');
+    await _withTimeout(
+      () => _storage.saveSyncMeta(
+        balance: payload.balance,
+        balanceUpdatedAt: payload.balanceUpdatedAt.toIso8601String(),
+        lastSyncAt: DateTime.now().toIso8601String(),
+        lastSyncDay: formatShanghaiDay(shanghaiNow()),
+      ),
+      step: 'sync.saveSyncMeta',
+      timeout: const Duration(seconds: 6),
     );
+    _logInfo('syncNow done');
   }
 
   bool shouldAutoSyncToday() {
