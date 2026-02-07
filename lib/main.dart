@@ -52,6 +52,8 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
+  static const bool _safeModeDisableAutoTasks = true;
+
   final TextEditingController _sidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -87,6 +89,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (_safeModeDisableAutoTasks) {
+        return;
+      }
       _autoSyncIfNeeded();
     }
   }
@@ -139,8 +144,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           _booting = false;
         });
       }
-      unawaited(_reloadSummarySafe());
-      unawaited(_autoSyncIfNeeded(showLastSyncWhenNoAction: true));
+      if (!_safeModeDisableAutoTasks) {
+        unawaited(_reloadSummarySafe());
+        unawaited(_autoSyncIfNeeded(showLastSyncWhenNoAction: true));
+      }
     }
   }
 
@@ -229,6 +236,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _autoSyncIfNeeded({
     bool showLastSyncWhenNoAction = false,
   }) async {
+    if (_safeModeDisableAutoTasks) {
+      return;
+    }
     final repo = _repository;
     if (repo == null || !repo.hasCredential || _settingUp || _syncing) {
       return;
@@ -248,7 +258,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   Future<void> _syncNow({
     required bool auto,
-    bool includeTransactions = true,
+    bool includeTransactions = false,
   }) async {
     final repo = _repository;
     if (repo == null || !repo.hasCredential || _settingUp || _syncing) {
@@ -289,7 +299,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return;
       }
       _profile = repo.profile;
-      await _reloadSummarySafe(month: _summary?.selectedMonth);
+      if (includeTransactions) {
+        await _reloadSummarySafe(month: _summary?.selectedMonth);
+      }
       if (!mounted) {
         return;
       }
@@ -357,7 +369,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return;
       }
       _profile = repo.profile;
-      unawaited(_reloadSummarySafe());
       if (!mounted) {
         return;
       }
@@ -487,6 +498,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       children: <Widget>[
         HomePage(
           summary: _summary,
+          hasCredential: _repository?.hasCredential ?? false,
           isSyncing: _syncing || _settingUp,
           status: _status,
           onMonthChanged: (month) {
@@ -519,17 +531,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         ],
       ),
       floatingActionButton: _tabIndex == 0 && !_needsSetup
-          ? FloatingActionButton(
+          ? FloatingActionButton.extended(
               onPressed: (_syncing || _settingUp)
                   ? null
-                  : () => _syncNow(auto: false),
-              child: _syncing
+                  : () => _syncNow(auto: false, includeTransactions: false),
+              icon: _syncing
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh),
+              label: Text(_syncing ? '刷新中' : '刷新'),
             )
           : null,
       bottomNavigationBar: NavigationBar(

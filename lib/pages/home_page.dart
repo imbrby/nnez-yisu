@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:mobile_app/core/time_utils.dart';
 import 'package:mobile_app/models/home_summary.dart';
 import 'package:mobile_app/models/transaction_record.dart';
@@ -8,12 +8,14 @@ class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
     required this.summary,
+    required this.hasCredential,
     required this.isSyncing,
     required this.status,
     required this.onMonthChanged,
   });
 
   final HomeSummary? summary;
+  final bool hasCredential;
   final bool isSyncing;
   final String status;
   final ValueChanged<String> onMonthChanged;
@@ -27,7 +29,7 @@ class HomePage extends StatelessWidget {
         children: <Widget>[
           _SectionCard(
             child: Text(
-              '请先到设置页初始化账号。',
+              hasCredential ? '已初始化。请点右下角“刷新”加载数据。' : '请先到设置页初始化账号。',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ),

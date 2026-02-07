@@ -21,7 +21,6 @@ class CanteenRepository {
   static Future<CanteenRepository> create() async {
     final storage = await LocalStorageService.create();
     final database = LocalDatabaseService();
-    await database.init();
     final apiClient = CampusApiClient();
     return CanteenRepository._(storage, database, apiClient);
   }
@@ -130,6 +129,7 @@ class CanteenRepository {
 
     await _storage.saveProfile(payload.profile);
     if (includeTransactions) {
+      await _database.init();
       onProgress?.call('正在写入本地数据...');
       await _database.upsertTransactions(
         sid,
@@ -157,6 +157,7 @@ class CanteenRepository {
     if (!hasCredential) {
       return null;
     }
+    await _database.init();
 
     final sid = _storage.campusSid;
     final currentMonth = monthOf(shanghaiNow());
@@ -265,7 +266,12 @@ class CanteenRepository {
 
   Future<void> logout() async {
     await _storage.clearAll();
-    await _database.clearAll();
+    try {
+      await _database.init();
+      await _database.clearAll();
+    } catch (_) {
+      // ignore db clear failure in logout path
+    }
   }
 
   Future<void> close() {
