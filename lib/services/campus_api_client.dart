@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:mobile_app/models/campus_profile.dart';
 import 'package:mobile_app/models/campus_sync_payload.dart';
 import 'package:mobile_app/models/transaction_record.dart';
@@ -12,6 +10,7 @@ import 'package:mobile_app/services/app_log_service.dart';
 
 class CampusApiClient {
   static const _baseUrl = 'http://xfxt.nnez.cn:455';
+  static const Duration _stepTimeout = Duration(seconds: 20);
 
   Future<CampusSyncPayload> fetchAll({
     required String sid,
@@ -25,66 +24,45 @@ class CampusApiClient {
     _logInfo(
       'fetchAll start sid=$sid includeTransactions=$includeTransactions range=$startDate~$endDate',
     );
+
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: _baseUrl,
+        connectTimeout: const Duration(seconds: 12),
+        sendTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 20),
+        responseType: ResponseType.plain,
+      ),
+    );
+    final session = _CampusSession();
+
     try {
       onProgress?.call('正在建立会话...');
-      final cookieJar = CookieJar();
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: _baseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          sendTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 30),
-          responseType: ResponseType.plain,
-        ),
-      );
-      dio.interceptors.add(CookieManager(cookieJar));
-      _logInfo('session created');
-
-      await dio.get<void>(
-        '/mobile/login',
-        options: Options(
-          headers: <String, String>{
-            'accept': 'text/html,application/xhtml+xml',
-          },
-        ),
-      );
-      _logInfo('GET /mobile/login done');
-
-      final bootCookies = await cookieJar.loadForRequest(
-        Uri.parse('$_baseUrl/mobile/login'),
-      );
-      final hasSession = bootCookies.any(
-        (cookie) => cookie.name == 'ASP.NET_SessionId',
-      );
-      if (!hasSession) {
-        throw Exception('未获取到 ASP.NET_SessionId，会话初始化失败。');
-      }
-      _logInfo('session cookie ok count=${bootCookies.length}');
+      await _bootstrapSession(dio, session);
+      _logInfo('session bootstrap ok cookies=${session.cookieCount}');
 
       onProgress?.call('正在初始化验证码会话...');
-      await _waitRandom(280, 760);
-      _logInfo('random wait before auth type done');
-
+      await _waitRandom(160, 420);
       final authTypeResp = await _postForm(
-        dio,
-        '/interface/index',
-        <String, String>{'method': 'loginauthtype'},
+        dio: dio,
+        session: session,
+        path: '/interface/index',
+        payload: <String, String>{'method': 'loginauthtype'},
         refererPath: '/mobile/login',
-      );
+      ).timeout(_stepTimeout);
       _logInfo(
         'POST loginauthtype done status=${authTypeResp.statusCode ?? 0}',
       );
 
-      await _waitRandom(500, 1200);
-      _logInfo('random wait before verify image done');
-
+      await _waitRandom(260, 720);
       final verifyResp = await _get(
-        dio,
-        '/interface/getVerifyCode?${Random().nextDouble()}',
+        dio: dio,
+        session: session,
+        path: '/interface/getVerifyCode?${Random().nextDouble()}',
         refererPath: '/mobile/login',
         accept:
             'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      );
+      ).timeout(_stepTimeout);
       if (verifyResp.statusCode != 200) {
         throw Exception('验证码会话初始化失败 (${verifyResp.statusCode ?? 0})');
       }
@@ -92,18 +70,18 @@ class CampusApiClient {
 
       onProgress?.call('正在登录账号...');
       final encodedPassword = base64Encode(utf8.encode(plainPassword));
-
       final loginResp = await _postForm(
-        dio,
-        '/interface/login',
-        <String, String>{
+        dio: dio,
+        session: session,
+        path: '/interface/login',
+        payload: <String, String>{
           'sid': sid,
           'passWord': encodedPassword,
           'verifycode': '',
           'ismobile': '1',
         },
         refererPath: '/mobile/login',
-      );
+      ).timeout(_stepTimeout);
       final loginJson = _decodeJson(loginResp.data);
       if (loginResp.statusCode != 200) {
         throw Exception('登录请求失败 (${loginResp.statusCode ?? 0})');
@@ -116,16 +94,20 @@ class CampusApiClient {
       List<dynamic> rawData = <dynamic>[];
       if (includeTransactions) {
         onProgress?.call('正在拉取消费流水...');
-        await _waitRandom(600, 1500);
-        _logInfo('random wait before transactions done');
-        final recordsResp =
-            await _postForm(dio, '/interface/index', <String, String>{
-              'method': 'getecardxfmx',
-              'stuid': '1',
-              'carno': sid,
-              'starttime': startDate,
-              'endtime': endDate,
-            }, refererPath: '/mobile/yktxfjl');
+        await _waitRandom(280, 840);
+        final recordsResp = await _postForm(
+          dio: dio,
+          session: session,
+          path: '/interface/index',
+          payload: <String, String>{
+            'method': 'getecardxfmx',
+            'stuid': '1',
+            'carno': sid,
+            'starttime': startDate,
+            'endtime': endDate,
+          },
+          refererPath: '/mobile/yktxfjl',
+        ).timeout(_stepTimeout);
         final recordsJson = _decodeJson(recordsResp.data);
         if (recordsResp.statusCode != 200) {
           throw Exception('查询流水失败 (${recordsResp.statusCode ?? 0})');
@@ -138,48 +120,74 @@ class CampusApiClient {
         _logInfo('transactions fetched rows=${rawData.length}');
       }
 
-      await _waitRandom(180, 500);
-      _logInfo('random wait before balance done');
-
       onProgress?.call('正在查询余额...');
-      final balance = await _fetchBalance(dio, sid);
+      final balance = await _fetchBalance(dio, session, sid);
       _logInfo('balance fetched value=${balance.toStringAsFixed(2)}');
+
       onProgress?.call('正在获取个人信息...');
-      final profile = await _fetchProfile(dio);
+      final profile = await _fetchProfile(dio, session);
       _logInfo(
         'profile fetched sid=${profile.sid} name=${profile.studentName}',
       );
+
       onProgress?.call('正在整理数据...');
       final rows = includeTransactions
           ? await _toRecords(sid: sid, rawList: rawData, onProgress: onProgress)
           : <TransactionRecord>[];
       _logInfo('records normalized rows=${rows.length}');
 
-      _logInfo('fetchAll done ${watch.elapsedMilliseconds}ms');
-      return CampusSyncPayload(
+      final payload = CampusSyncPayload(
         profile: profile,
         transactions: rows,
         balance: balance,
         balanceUpdatedAt: DateTime.now(),
       );
+      _logInfo('fetchAll done ${watch.elapsedMilliseconds}ms');
+      return payload;
+    } on TimeoutException catch (error, stackTrace) {
+      _logError('fetchAll timeout', error, stackTrace);
+      throw Exception('校园接口超时，请稍后重试。');
     } on DioException catch (error) {
       _logError('fetchAll dio error', error, error.stackTrace);
       throw Exception(_formatDioError(error));
-    } on FormatException {
-      _logInfo('fetchAll format exception');
+    } on FormatException catch (error, stackTrace) {
+      _logError('fetchAll format exception', error, stackTrace);
       throw Exception('服务器返回数据格式异常，请稍后重试。');
     } catch (error, stackTrace) {
       _logError('fetchAll unexpected error', error, stackTrace);
       rethrow;
+    } finally {
+      dio.close(force: true);
+      _logInfo('dio closed');
     }
   }
 
-  Future<Response<String>> _postForm(
-    Dio dio,
-    String path,
-    Map<String, String> payload, {
+  Future<void> _bootstrapSession(Dio dio, _CampusSession session) async {
+    final response = await dio
+        .get<String>(
+          '/mobile/login',
+          options: Options(
+            headers: <String, String>{
+              'accept': 'text/html,application/xhtml+xml',
+            },
+          ),
+        )
+        .timeout(_stepTimeout);
+
+    session.absorb(response.headers);
+    if (!session.has('ASP.NET_SessionId')) {
+      throw Exception('未获取到 ASP.NET_SessionId，会话初始化失败。');
+    }
+    _logInfo('GET /mobile/login done');
+  }
+
+  Future<Response<String>> _postForm({
+    required Dio dio,
+    required _CampusSession session,
+    required String path,
+    required Map<String, String> payload,
     required String refererPath,
-  }) {
+  }) async {
     final body = payload.entries
         .map(
           (entry) =>
@@ -187,45 +195,57 @@ class CampusApiClient {
         )
         .join('&');
 
-    return dio.post<String>(
+    final headers = <String, String>{
+      'accept': 'application/json, text/javascript, */*; q=0.01',
+      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'x-requested-with': 'XMLHttpRequest',
+      'referer': '$_baseUrl$refererPath',
+    };
+    session.applyTo(headers);
+
+    final response = await dio.post<String>(
       path,
       data: body,
-      options: Options(
-        headers: <String, String>{
-          'accept': 'application/json, text/javascript, */*; q=0.01',
-          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'x-requested-with': 'XMLHttpRequest',
-          'referer': '$_baseUrl$refererPath',
-        },
-        responseType: ResponseType.plain,
-      ),
+      options: Options(headers: headers, responseType: ResponseType.plain),
     );
+    session.absorb(response.headers);
+    return response;
   }
 
-  Future<Response<String>> _get(
-    Dio dio,
-    String path, {
+  Future<Response<String>> _get({
+    required Dio dio,
+    required _CampusSession session,
+    required String path,
     required String refererPath,
     String accept = '*/*',
-  }) {
-    return dio.get<String>(
+  }) async {
+    final headers = <String, String>{
+      'accept': accept,
+      'referer': '$_baseUrl$refererPath',
+    };
+    session.applyTo(headers);
+
+    final response = await dio.get<String>(
       path,
-      options: Options(
-        headers: <String, String>{
-          'accept': accept,
-          'referer': '$_baseUrl$refererPath',
-        },
-        responseType: ResponseType.plain,
-      ),
+      options: Options(headers: headers, responseType: ResponseType.plain),
     );
+    session.absorb(response.headers);
+    return response;
   }
 
-  Future<double> _fetchBalance(Dio dio, String sid) async {
+  Future<double> _fetchBalance(
+    Dio dio,
+    _CampusSession session,
+    String sid,
+  ) async {
     _logInfo('fetchBalance start sid=$sid');
-    final response = await _postForm(dio, '/interface/index', <String, String>{
-      'method': 'getecardyue',
-      'carno': sid,
-    }, refererPath: '/mobile/yktzxcz');
+    final response = await _postForm(
+      dio: dio,
+      session: session,
+      path: '/interface/index',
+      payload: <String, String>{'method': 'getecardyue', 'carno': sid},
+      refererPath: '/mobile/yktzxcz',
+    ).timeout(_stepTimeout);
     final payload = _decodeJson(response.data);
     if (response.statusCode != 200 || !_isSuccess(payload)) {
       throw Exception('查询余额失败：${_extractMessage(payload)}');
@@ -238,12 +258,15 @@ class CampusApiClient {
     return value;
   }
 
-  Future<CampusProfile> _fetchProfile(Dio dio) async {
+  Future<CampusProfile> _fetchProfile(Dio dio, _CampusSession session) async {
     _logInfo('fetchProfile start');
-    final response = await _postForm(dio, '/interface/index', <String, String>{
-      'method': 'getinfo',
-      'stuid': '1',
-    }, refererPath: '/mobile/stuinfo');
+    final response = await _postForm(
+      dio: dio,
+      session: session,
+      path: '/interface/index',
+      payload: <String, String>{'method': 'getinfo', 'stuid': '1'},
+      refererPath: '/mobile/stuinfo',
+    ).timeout(_stepTimeout);
     final payload = _decodeJson(response.data);
     if (response.statusCode != 200 || !_isSuccess(payload)) {
       throw Exception('获取用户信息失败：${_extractMessage(payload)}');
@@ -265,20 +288,22 @@ class CampusApiClient {
     final records = <TransactionRecord>[];
     final total = rawList.length;
     var index = 0;
+
     for (final row in rawList) {
       index += 1;
       if (row is! Map<String, dynamic>) {
-        if (index % 200 == 0) {
+        if (index % 100 == 0) {
           onProgress?.call('正在整理数据...$index/$total');
           await Future<void>.delayed(Duration.zero);
         }
         continue;
       }
+
       final normalized = _normalizeRow(sid, row);
       if (normalized != null) {
         records.add(normalized);
       }
-      if (index % 200 == 0) {
+      if (index % 100 == 0) {
         onProgress?.call('正在整理数据...$index/$total');
         await Future<void>.delayed(Duration.zero);
       }
@@ -341,6 +366,9 @@ class CampusApiClient {
     if (decoded is Map<String, dynamic>) {
       return decoded;
     }
+    if (decoded is Map) {
+      return Map<String, dynamic>.from(decoded);
+    }
     return <String, dynamic>{'raw': decoded};
   }
 
@@ -399,5 +427,44 @@ class CampusApiClient {
         stackTrace: stackTrace,
       ),
     );
+  }
+}
+
+class _CampusSession {
+  final Map<String, String> _cookies = <String, String>{};
+
+  int get cookieCount => _cookies.length;
+
+  bool has(String key) => _cookies.containsKey(key);
+
+  void applyTo(Map<String, String> headers) {
+    if (_cookies.isEmpty) {
+      return;
+    }
+    headers['cookie'] = _cookies.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join('; ');
+  }
+
+  void absorb(Headers headers) {
+    final setCookieValues = headers['set-cookie'];
+    if (setCookieValues == null || setCookieValues.isEmpty) {
+      return;
+    }
+    for (final raw in setCookieValues) {
+      final firstPart = raw.split(';').first.trim();
+      if (firstPart.isEmpty) {
+        continue;
+      }
+      final idx = firstPart.indexOf('=');
+      if (idx <= 0) {
+        continue;
+      }
+      final name = firstPart.substring(0, idx).trim();
+      final value = firstPart.substring(idx + 1).trim();
+      if (name.isNotEmpty) {
+        _cookies[name] = value;
+      }
+    }
   }
 }
