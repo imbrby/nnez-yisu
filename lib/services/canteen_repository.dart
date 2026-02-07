@@ -18,6 +18,11 @@ class CanteenRepository {
 
   final LocalStorageService _storage;
   final CampusApiClient _apiClient;
+  CampusProfile? _volatileProfile;
+  double? _volatileBalance;
+  String? _volatileBalanceUpdatedAt;
+  String? _volatileLastSyncAt;
+  String? _volatileLastSyncDay;
 
   static Future<CanteenRepository> create() async {
     final storage = await LocalStorageService.create();
@@ -27,9 +32,9 @@ class CanteenRepository {
 
   bool get hasCredential => _storage.hasCredential;
 
-  CampusProfile? get profile => _storage.profile;
+  CampusProfile? get profile => _volatileProfile ?? _storage.profile;
 
-  String? get lastSyncAt => _storage.lastSyncAt;
+  String? get lastSyncAt => _volatileLastSyncAt ?? _storage.lastSyncAt;
 
   Future<void> initializeAccount({
     required String sid,
@@ -57,6 +62,7 @@ class CanteenRepository {
         academyName: '',
         specialityName: '',
       );
+      _volatileProfile = placeholder;
       await _runTimed(() => _storage.saveProfile(placeholder), '保存用户信息超时');
       await _runTimed(() {
         return _storage.saveSyncMeta(
@@ -66,6 +72,10 @@ class CanteenRepository {
           lastSyncDay: '',
         );
       }, '保存同步状态超时');
+      _volatileBalance = 0;
+      _volatileBalanceUpdatedAt = '';
+      _volatileLastSyncAt = '';
+      _volatileLastSyncDay = '';
       await _runTimed(
         () => _storage.saveTransactions(normalizedSid, <TransactionRecord>[]),
         '清理本地消费缓存超时',
@@ -82,15 +92,20 @@ class CanteenRepository {
       includeTransactions: false,
       onProgress: onProgress,
     );
-    await _runTimed(() => _storage.saveProfile(payload.profile), '保存用户信息超时');
-    await _runTimed(() {
-      return _storage.saveSyncMeta(
+    _volatileProfile = payload.profile;
+    _volatileBalance = payload.balance;
+    _volatileBalanceUpdatedAt = payload.balanceUpdatedAt.toIso8601String();
+    _volatileLastSyncAt = '';
+    _volatileLastSyncDay = '';
+    unawaited(_saveProfileBestEffort(payload.profile));
+    unawaited(
+      _saveSyncMetaBestEffort(
         balance: payload.balance,
         balanceUpdatedAt: payload.balanceUpdatedAt.toIso8601String(),
         lastSyncAt: '',
         lastSyncDay: '',
-      );
-    }, '保存同步状态超时');
+      ),
+    );
   }
 
   Future<void> _runTimed(
@@ -122,21 +137,30 @@ class CanteenRepository {
               : _autoSyncLookbackDays),
     );
 
-    final payload = await _apiClient.fetchAll(
-      sid: sid,
-      plainPassword: password,
-      startDate: range.startDate,
-      endDate: range.endDate,
-      includeTransactions: includeTransactions,
-      onProgress: onProgress,
-    );
+    _logInfo('sync.fetchAll start');
+    final payload = await _apiClient
+        .fetchAll(
+          sid: sid,
+          plainPassword: password,
+          startDate: range.startDate,
+          endDate: range.endDate,
+          includeTransactions: includeTransactions,
+          onProgress: onProgress,
+        )
+        .timeout(
+          const Duration(seconds: 50),
+          onTimeout: () {
+            throw TimeoutException('同步接口超时，请稍后重试。');
+          },
+        );
+    _logInfo('sync.fetchAll ok');
 
+    onProgress?.call('网络数据处理完成，正在更新界面...');
+    _volatileProfile = payload.profile;
+    _volatileBalance = payload.balance;
+    _volatileBalanceUpdatedAt = payload.balanceUpdatedAt.toIso8601String();
     _logInfo('syncNow fetched payload txns=${payload.transactions.length}');
-    await _withTimeout(
-      () => _storage.saveProfile(payload.profile),
-      step: 'sync.saveProfile',
-      timeout: const Duration(seconds: 6),
-    );
+    unawaited(_saveProfileBestEffort(payload.profile));
     if (includeTransactions) {
       _logInfo('syncNow about to notify progress: 写入本地数据');
       onProgress?.call('正在写入本地数据...');
@@ -144,15 +168,19 @@ class CanteenRepository {
       await _saveTransactionsBestEffort(sid, payload.transactions);
     }
     onProgress?.call('正在保存同步信息...');
+    final nowIso = DateTime.now().toIso8601String();
+    final today = formatShanghaiDay(shanghaiNow());
+    _volatileLastSyncAt = nowIso;
+    _volatileLastSyncDay = today;
     await _withTimeout(
-      () => _storage.saveSyncMeta(
+      () => _saveSyncMetaBestEffort(
         balance: payload.balance,
         balanceUpdatedAt: payload.balanceUpdatedAt.toIso8601String(),
-        lastSyncAt: DateTime.now().toIso8601String(),
-        lastSyncDay: formatShanghaiDay(shanghaiNow()),
+        lastSyncAt: nowIso,
+        lastSyncDay: today,
       ),
-      step: 'sync.saveSyncMeta',
-      timeout: const Duration(seconds: 6),
+      step: 'sync.saveSyncMeta.bestEffort',
+      timeout: const Duration(seconds: 5),
     );
     _logInfo('syncNow done');
   }
@@ -162,7 +190,8 @@ class CanteenRepository {
       return false;
     }
     final today = formatShanghaiDay(shanghaiNow());
-    return _storage.lastSyncDay != today;
+    final lastSyncDay = _volatileLastSyncDay ?? _storage.lastSyncDay;
+    return lastSyncDay != today;
   }
 
   Future<HomeSummary?> loadSummary({String? requestedMonth}) async {
@@ -318,9 +347,10 @@ class CanteenRepository {
         recent: recentTop20,
         totalAmount: totalAmount,
         transactionCount: transactionCount,
-        currentBalance: _storage.currentBalance,
-        balanceUpdatedAt: _storage.balanceUpdatedAt,
-        lastSyncAt: _storage.lastSyncAt,
+        currentBalance: _volatileBalance ?? _storage.currentBalance,
+        balanceUpdatedAt:
+            _volatileBalanceUpdatedAt ?? _storage.balanceUpdatedAt,
+        lastSyncAt: _volatileLastSyncAt ?? _storage.lastSyncAt,
       );
     } catch (error, stackTrace) {
       _logError('loadSummary failed', error, stackTrace);
@@ -329,6 +359,11 @@ class CanteenRepository {
   }
 
   Future<void> logout() async {
+    _volatileProfile = null;
+    _volatileBalance = null;
+    _volatileBalanceUpdatedAt = null;
+    _volatileLastSyncAt = null;
+    _volatileLastSyncDay = null;
     await _storage.clearAll();
   }
 
@@ -417,6 +452,48 @@ class CanteenRepository {
         error,
         stackTrace,
       );
+    }
+  }
+
+  Future<void> _saveProfileBestEffort(CampusProfile profile) async {
+    try {
+      await _storage
+          .saveProfile(profile)
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              throw TimeoutException('saveProfile 超时');
+            },
+          );
+      _logInfo('saveProfile persisted');
+    } catch (error, stackTrace) {
+      _logError('saveProfile best-effort failed', error, stackTrace);
+    }
+  }
+
+  Future<void> _saveSyncMetaBestEffort({
+    required double balance,
+    required String balanceUpdatedAt,
+    required String lastSyncAt,
+    required String lastSyncDay,
+  }) async {
+    try {
+      await _storage
+          .saveSyncMeta(
+            balance: balance,
+            balanceUpdatedAt: balanceUpdatedAt,
+            lastSyncAt: lastSyncAt,
+            lastSyncDay: lastSyncDay,
+          )
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              throw TimeoutException('saveSyncMeta 超时');
+            },
+          );
+      _logInfo('saveSyncMeta persisted');
+    } catch (error, stackTrace) {
+      _logError('saveSyncMeta best-effort failed', error, stackTrace);
     }
   }
 
