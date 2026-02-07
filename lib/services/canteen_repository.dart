@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:mobile_app/core/time_utils.dart';
 import 'package:mobile_app/models/campus_profile.dart';
 import 'package:mobile_app/models/home_summary.dart';
+import 'package:mobile_app/services/app_log_service.dart';
 import 'package:mobile_app/services/campus_api_client.dart';
 import 'package:mobile_app/services/local_database_service.dart';
 import 'package:mobile_app/services/local_storage_service.dart';
@@ -153,114 +154,135 @@ class CanteenRepository {
   }
 
   Future<HomeSummary?> loadSummary({String? requestedMonth}) async {
+    _logInfo(
+      'loadSummary start requestedMonth=${requestedMonth ?? "(current)"}',
+    );
     if (!hasCredential) {
+      _logInfo('loadSummary skipped: no credential');
       return null;
     }
-    await _database.init();
+    try {
+      await _withTimeout(() => _database.init(), step: 'db.init');
 
-    final sid = _storage.campusSid;
-    final currentMonth = monthOf(shanghaiNow());
-    final earliestMonth = addMonths(currentMonth, -11);
-    final selectedMonth = _resolveMonth(
-      requestedMonth: requestedMonth,
-      fallbackMonth: _storage.selectedMonth,
-      minMonth: earliestMonth,
-      maxMonth: currentMonth,
-    );
-
-    final selectedStart = monthStart(selectedMonth);
-    final selectedEnd = monthEnd(selectedMonth);
-    final historyStart = monthStart(earliestMonth);
-    final historyEnd = monthEnd(currentMonth);
-
-    await _storage.saveSelectedMonth(selectedMonth);
-
-    final dailyRows = await _database.queryDailyTotals(
-      sid: sid,
-      startDate: selectedStart,
-      endDate: selectedEnd,
-    );
-
-    final dayMap = <String, DailySpending>{};
-    for (final row in dailyRows) {
-      final day = (row['day'] ?? '').toString();
-      if (day.isEmpty) {
-        continue;
-      }
-      dayMap[day] = DailySpending(
-        day: day,
-        totalAmount: _toDouble(row['total_amount']).abs(),
-        txnCount: _toInt(row['txn_count']),
+      final sid = _storage.campusSid;
+      final currentMonth = monthOf(shanghaiNow());
+      final earliestMonth = addMonths(currentMonth, -11);
+      final selectedMonth = _resolveMonth(
+        requestedMonth: requestedMonth,
+        fallbackMonth: _storage.selectedMonth,
+        minMonth: earliestMonth,
+        maxMonth: currentMonth,
       );
-    }
 
-    final fullDays = daysBetween(selectedStart, selectedEnd);
-    final daily = fullDays
-        .map(
-          (day) =>
-              dayMap[day] ??
-              DailySpending(day: day, totalAmount: 0, txnCount: 0),
-        )
-        .toList();
+      final selectedStart = monthStart(selectedMonth);
+      final selectedEnd = monthEnd(selectedMonth);
+      final historyStart = monthStart(earliestMonth);
+      final historyEnd = monthEnd(currentMonth);
 
-    final recent = await _database.queryRecent(sid: sid, limit: 20);
+      unawaited(_saveSelectedMonthNonBlocking(selectedMonth));
 
-    final monthRows = await _database.queryMonthlyTotals(
-      sid: sid,
-      startDate: historyStart,
-      endDate: historyEnd,
-    );
-    final monthMap = <String, MonthOverview>{};
-    for (final row in monthRows) {
-      final month = (row['month'] ?? '').toString();
-      if (month.isEmpty) {
-        continue;
-      }
-      final txnCount = _toInt(row['txn_count']);
-      monthMap[month] = MonthOverview(
-        month: month,
-        totalAmount: _toDouble(row['total_amount']).abs(),
-        txnCount: txnCount,
-        hasData: txnCount > 0,
+      final dailyRows = await _withTimeout(
+        () => _database.queryDailyTotals(
+          sid: sid,
+          startDate: selectedStart,
+          endDate: selectedEnd,
+        ),
+        step: 'db.queryDailyTotals',
       );
+
+      final dayMap = <String, DailySpending>{};
+      for (final row in dailyRows) {
+        final day = (row['day'] ?? '').toString();
+        if (day.isEmpty) {
+          continue;
+        }
+        dayMap[day] = DailySpending(
+          day: day,
+          totalAmount: _toDouble(row['total_amount']).abs(),
+          txnCount: _toInt(row['txn_count']),
+        );
+      }
+
+      final fullDays = daysBetween(selectedStart, selectedEnd);
+      final daily = fullDays
+          .map(
+            (day) =>
+                dayMap[day] ??
+                DailySpending(day: day, totalAmount: 0, txnCount: 0),
+          )
+          .toList();
+
+      final recent = await _withTimeout(
+        () => _database.queryRecent(sid: sid, limit: 20),
+        step: 'db.queryRecent',
+      );
+
+      final monthRows = await _withTimeout(
+        () => _database.queryMonthlyTotals(
+          sid: sid,
+          startDate: historyStart,
+          endDate: historyEnd,
+        ),
+        step: 'db.queryMonthlyTotals',
+      );
+      final monthMap = <String, MonthOverview>{};
+      for (final row in monthRows) {
+        final month = (row['month'] ?? '').toString();
+        if (month.isEmpty) {
+          continue;
+        }
+        final txnCount = _toInt(row['txn_count']);
+        monthMap[month] = MonthOverview(
+          month: month,
+          totalAmount: _toDouble(row['total_amount']).abs(),
+          txnCount: txnCount,
+          hasData: txnCount > 0,
+        );
+      }
+
+      final availableMonths = monthsBetween(earliestMonth, currentMonth)
+          .map(
+            (month) =>
+                monthMap[month] ??
+                MonthOverview(
+                  month: month,
+                  totalAmount: 0,
+                  txnCount: 0,
+                  hasData: false,
+                ),
+          )
+          .toList();
+
+      final totalAmount = daily.fold<double>(
+        0,
+        (sum, item) => sum + item.totalAmount,
+      );
+      final transactionCount = daily.fold<int>(
+        0,
+        (sum, item) => sum + item.txnCount,
+      );
+
+      _logInfo(
+        'loadSummary done month=$selectedMonth daily=${daily.length} recent=${recent.length} monthRows=${monthRows.length}',
+      );
+      return HomeSummary(
+        selectedMonth: selectedMonth,
+        startDate: selectedStart,
+        endDate: selectedEnd,
+        days: monthDays(selectedMonth),
+        availableMonths: availableMonths,
+        daily: daily,
+        recent: recent,
+        totalAmount: totalAmount,
+        transactionCount: transactionCount,
+        currentBalance: _storage.currentBalance,
+        balanceUpdatedAt: _storage.balanceUpdatedAt,
+        lastSyncAt: _storage.lastSyncAt,
+      );
+    } catch (error, stackTrace) {
+      _logError('loadSummary failed', error, stackTrace);
+      rethrow;
     }
-
-    final availableMonths = monthsBetween(earliestMonth, currentMonth)
-        .map(
-          (month) =>
-              monthMap[month] ??
-              MonthOverview(
-                month: month,
-                totalAmount: 0,
-                txnCount: 0,
-                hasData: false,
-              ),
-        )
-        .toList();
-
-    final totalAmount = daily.fold<double>(
-      0,
-      (sum, item) => sum + item.totalAmount,
-    );
-    final transactionCount = daily.fold<int>(
-      0,
-      (sum, item) => sum + item.txnCount,
-    );
-
-    return HomeSummary(
-      selectedMonth: selectedMonth,
-      startDate: selectedStart,
-      endDate: selectedEnd,
-      days: monthDays(selectedMonth),
-      availableMonths: availableMonths,
-      daily: daily,
-      recent: recent,
-      totalAmount: totalAmount,
-      transactionCount: transactionCount,
-      currentBalance: _storage.currentBalance,
-      balanceUpdatedAt: _storage.balanceUpdatedAt,
-      lastSyncAt: _storage.lastSyncAt,
-    );
   }
 
   Future<void> logout() async {
@@ -309,6 +331,53 @@ class CanteenRepository {
       return value.toInt();
     }
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Future<void> _saveSelectedMonthNonBlocking(String month) async {
+    try {
+      await _storage
+          .saveSelectedMonth(month)
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              throw TimeoutException('saveSelectedMonth 超时');
+            },
+          );
+      _logInfo('saveSelectedMonth ok: $month');
+    } catch (error, stackTrace) {
+      _logError('saveSelectedMonth failed', error, stackTrace);
+    }
+  }
+
+  Future<T> _withTimeout<T>(
+    Future<T> Function() action, {
+    required String step,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final watch = Stopwatch()..start();
+    final value = await action().timeout(
+      timeout,
+      onTimeout: () {
+        throw TimeoutException('$step 超时');
+      },
+    );
+    _logInfo('$step ok ${watch.elapsedMilliseconds}ms');
+    return value;
+  }
+
+  void _logInfo(String message) {
+    unawaited(AppLogService.instance.info(message, tag: 'REPO'));
+  }
+
+  void _logError(String context, Object error, StackTrace stackTrace) {
+    unawaited(
+      AppLogService.instance.error(
+        context,
+        tag: 'REPO',
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
   }
 
   String _resolveMonth({
