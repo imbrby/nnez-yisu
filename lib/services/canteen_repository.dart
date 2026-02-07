@@ -161,8 +161,11 @@ class CanteenRepository {
       _logInfo('loadSummary skipped: no credential');
       return null;
     }
+    LocalDatabaseService? reader;
     try {
-      await _withTimeout(() => _database.init(), step: 'db.init');
+      final dbReader = LocalDatabaseService();
+      reader = dbReader;
+      await _withTimeout(() => dbReader.init(), step: 'reader.init');
 
       final sid = _storage.campusSid;
       final currentMonth = monthOf(shanghaiNow());
@@ -179,16 +182,20 @@ class CanteenRepository {
       final historyStart = monthStart(earliestMonth);
       final historyEnd = monthEnd(currentMonth);
 
+      _logInfo(
+        'loadSummary window selected=$selectedStart~$selectedEnd history=$historyStart~$historyEnd',
+      );
       unawaited(_saveSelectedMonthNonBlocking(selectedMonth));
 
       final selectedRows = await _withTimeout(
-        () => _database.queryByDayRange(
+        () => dbReader.queryByDayRange(
           sid: sid,
           startDate: selectedStart,
           endDate: selectedEnd,
         ),
-        step: 'db.queryByDayRange(selected)',
+        step: 'reader.queryByDayRange(selected)',
       );
+      _logInfo('selectedRows loaded: ${selectedRows.length}');
 
       final dayMap = <String, DailySpending>{};
       for (final row in selectedRows) {
@@ -208,6 +215,7 @@ class CanteenRepository {
           txnCount: current.txnCount + 1,
         );
       }
+      _logInfo('dayMap aggregated: ${dayMap.length}');
 
       final fullDays = daysBetween(selectedStart, selectedEnd);
       final daily = fullDays
@@ -217,15 +225,17 @@ class CanteenRepository {
                 DailySpending(day: day, totalAmount: 0, txnCount: 0),
           )
           .toList();
+      _logInfo('daily series built: ${daily.length}');
 
       final historyRows = await _withTimeout(
-        () => _database.queryByDayRange(
+        () => dbReader.queryByDayRange(
           sid: sid,
           startDate: historyStart,
           endDate: historyEnd,
         ),
-        step: 'db.queryByDayRange(history)',
+        step: 'reader.queryByDayRange(history)',
       );
+      _logInfo('historyRows loaded: ${historyRows.length}');
       final monthMap = <String, MonthOverview>{};
       for (final row in historyRows) {
         if (row.occurredDay.length < 7) {
@@ -249,6 +259,7 @@ class CanteenRepository {
           hasData: true,
         );
       }
+      _logInfo('monthMap aggregated: ${monthMap.length}');
 
       final recent = historyRows.toList()
         ..sort((a, b) {
@@ -259,6 +270,7 @@ class CanteenRepository {
           return b.txnId.compareTo(a.txnId);
         });
       final recentTop20 = recent.take(20).toList();
+      _logInfo('recentTop20 built: ${recentTop20.length}');
 
       final availableMonths = monthsBetween(earliestMonth, currentMonth)
           .map(
@@ -281,6 +293,9 @@ class CanteenRepository {
         0,
         (sum, item) => sum + item.txnCount,
       );
+      _logInfo(
+        'summary totals: totalAmount=${totalAmount.toStringAsFixed(2)} txnCount=$transactionCount',
+      );
 
       _logInfo(
         'loadSummary done month=$selectedMonth daily=${daily.length} recent=${recentTop20.length} history=${historyRows.length}',
@@ -302,6 +317,20 @@ class CanteenRepository {
     } catch (error, stackTrace) {
       _logError('loadSummary failed', error, stackTrace);
       rethrow;
+    } finally {
+      if (reader != null) {
+        try {
+          await reader.close().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              throw TimeoutException('reader.close 超时');
+            },
+          );
+          _logInfo('reader.close ok');
+        } catch (error, stackTrace) {
+          _logError('reader.close failed', error, stackTrace);
+        }
+      }
     }
   }
 
@@ -356,6 +385,7 @@ class CanteenRepository {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     final watch = Stopwatch()..start();
+    _logInfo('$step start');
     final value = await action().timeout(
       timeout,
       onTimeout: () {

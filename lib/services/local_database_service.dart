@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:mobile_app/services/app_log_service.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -20,9 +21,11 @@ class LocalDatabaseService {
 
   Future<void> init() async {
     if (_db != null) {
+      _logInfo('init skipped: already opened');
       return;
     }
     final dbPath = await resolveDatabasePath();
+    _logInfo('init start path=$dbPath');
     _db = await openDatabase(
       dbPath,
       version: 1,
@@ -49,6 +52,7 @@ class LocalDatabaseService {
         );
       },
     );
+    _logInfo('init done');
   }
 
   Database get db {
@@ -65,8 +69,10 @@ class LocalDatabaseService {
     void Function(String message)? onProgress,
   }) async {
     if (rows.isEmpty) {
+      _logInfo('upsert skipped: rows=0 sid=$sid');
       return;
     }
+    _logInfo('upsert start sid=$sid rows=${rows.length}');
 
     const chunkSize = 250;
     var processed = 0;
@@ -85,9 +91,11 @@ class LocalDatabaseService {
       }
       await batch.commit(noResult: true);
       processed = end;
+      _logInfo('upsert chunk committed $processed/${rows.length}');
       onProgress?.call('正在写入本地数据...$processed/${rows.length}');
       await Future<void>.delayed(Duration.zero);
     }
+    _logInfo('upsert done sid=$sid rows=${rows.length}');
   }
 
   Future<List<Map<String, Object?>>> queryDailyTotals({
@@ -110,12 +118,14 @@ class LocalDatabaseService {
     required String startDate,
     required String endDate,
   }) async {
+    _logInfo('queryByDayRange start sid=$sid $startDate~$endDate');
     final rows = await db.query(
       'transactions',
       where: 'sid = ? AND occurred_day BETWEEN ? AND ?',
       whereArgs: <Object?>[sid, startDate, endDate],
       orderBy: 'occurred_at ASC, txn_id ASC',
     );
+    _logInfo('queryByDayRange done sid=$sid rows=${rows.length}');
     return rows.map(TransactionRecord.fromDbMap).toList();
   }
 
@@ -138,6 +148,7 @@ class LocalDatabaseService {
     required String sid,
     int limit = 20,
   }) async {
+    _logInfo('queryRecent start sid=$sid limit=$limit');
     final rows = await db.query(
       'transactions',
       where: 'sid = ?',
@@ -145,6 +156,7 @@ class LocalDatabaseService {
       orderBy: 'occurred_at DESC, txn_id DESC',
       limit: limit,
     );
+    _logInfo('queryRecent done sid=$sid rows=${rows.length}');
     return rows.map(TransactionRecord.fromDbMap).toList();
   }
 
@@ -155,8 +167,14 @@ class LocalDatabaseService {
   Future<void> close() async {
     final value = _db;
     if (value != null) {
+      _logInfo('close start');
       await value.close();
       _db = null;
+      _logInfo('close done');
     }
+  }
+
+  void _logInfo(String message) {
+    unawaited(AppLogService.instance.info(message, tag: 'DB'));
   }
 }
