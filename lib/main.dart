@@ -342,15 +342,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       final syncFuture = repo.syncNow(
         includeTransactions: includeTransactions,
         lookbackDays: lookbackDays,
-        onProgress: (message) {
-          if (!mounted) {
-            return;
-          }
-          _logInfo('刷新进度: $message');
-          setState(() {
-            _status = message;
-          });
-        },
+        onProgress: null,
       );
       final watchdog = Future<void>.delayed(
         Duration(seconds: includeTransactions ? 25 : 15),
