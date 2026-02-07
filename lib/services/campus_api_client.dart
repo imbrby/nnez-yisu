@@ -20,7 +20,6 @@ class CampusApiClient {
     bool includeTransactions = true,
     void Function(String message)? onProgress,
   }) async {
-    final watch = Stopwatch()..start();
     _logInfo(
       'fetchAll start sid=$sid includeTransactions=$includeTransactions range=$startDate~$endDate',
     );
@@ -136,14 +135,12 @@ class CampusApiClient {
           : <TransactionRecord>[];
       _logInfo('records normalized rows=${rows.length}');
 
-      final payload = CampusSyncPayload(
+      return CampusSyncPayload(
         profile: profile,
         transactions: rows,
         balance: balance,
         balanceUpdatedAt: DateTime.now(),
       );
-      _logInfo('fetchAll done ${watch.elapsedMilliseconds}ms');
-      return payload;
     } on TimeoutException catch (error, stackTrace) {
       _logError('fetchAll timeout', error, stackTrace);
       throw Exception('校园接口超时，请稍后重试。');
@@ -156,9 +153,6 @@ class CampusApiClient {
     } catch (error, stackTrace) {
       _logError('fetchAll unexpected error', error, stackTrace);
       rethrow;
-    } finally {
-      dio.close(force: true);
-      _logInfo('dio closed');
     }
   }
 
