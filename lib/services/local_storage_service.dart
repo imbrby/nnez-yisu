@@ -7,10 +7,17 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 class LocalStorageService {
-  LocalStorageService._(this._file, this._cache);
+  LocalStorageService._(
+    this._stateFile,
+    this._stateCache,
+    this._transactionsFile,
+    this._transactionsBySid,
+  );
 
-  final File _file;
-  final Map<String, dynamic> _cache;
+  final File _stateFile;
+  final Map<String, dynamic> _stateCache;
+  final File _transactionsFile;
+  final Map<String, dynamic> _transactionsBySid;
 
   static const _sidKey = 'campus_sid';
   static const _passwordKey = 'campus_password';
@@ -20,24 +27,26 @@ class LocalStorageService {
   static const _lastSyncAtKey = 'last_sync_at';
   static const _lastSyncDayKey = 'last_sync_day';
   static const _selectedMonthKey = 'selected_month';
+  // Legacy key kept for migration from older versions.
   static const _transactionsBySidKey = 'transactions_by_sid';
 
   static Future<LocalStorageService> create() async {
     final baseDir = await getApplicationDocumentsDirectory();
-    final file = File(path.join(baseDir.path, 'app_state.json'));
-    Map<String, dynamic> cache = <String, dynamic>{};
-    if (await file.exists()) {
-      try {
-        final raw = await file.readAsString();
-        final parsed = jsonDecode(raw);
-        if (parsed is Map<String, dynamic>) {
-          cache = parsed;
-        }
-      } catch (_) {
-        cache = <String, dynamic>{};
-      }
-    }
-    return LocalStorageService._(file, cache);
+    final stateFile = File(path.join(baseDir.path, 'app_state.json'));
+    final transactionsFile = File(
+      path.join(baseDir.path, 'transactions_by_sid.json'),
+    );
+    final stateCache = await _readMapFromFile(stateFile);
+    final transactionsBySid = await _readMapFromFile(transactionsFile);
+
+    final service = LocalStorageService._(
+      stateFile,
+      stateCache,
+      transactionsFile,
+      transactionsBySid,
+    );
+    await service._migrateLegacyTransactionsIfNeeded();
+    return service;
   }
 
   bool get hasCredential {
@@ -45,38 +54,38 @@ class LocalStorageService {
   }
 
   String get campusSid {
-    return (_cache[_sidKey] ?? '').toString();
+    return (_stateCache[_sidKey] ?? '').toString();
   }
 
   String get campusPassword {
-    return (_cache[_passwordKey] ?? '').toString();
+    return (_stateCache[_passwordKey] ?? '').toString();
   }
 
   String get selectedMonth {
-    return (_cache[_selectedMonthKey] ?? '').toString();
+    return (_stateCache[_selectedMonthKey] ?? '').toString();
   }
 
   Future<void> saveSelectedMonth(String month) {
-    _cache[_selectedMonthKey] = month;
-    return _persist();
+    _stateCache[_selectedMonthKey] = month;
+    return _persistState();
   }
 
   Future<void> saveCredentials({
     required String sid,
     required String password,
   }) async {
-    _cache[_sidKey] = sid.trim();
-    _cache[_passwordKey] = password;
-    await _persist();
+    _stateCache[_sidKey] = sid.trim();
+    _stateCache[_passwordKey] = password;
+    await _persistState();
   }
 
   Future<void> saveProfile(CampusProfile profile) async {
-    _cache[_profileKey] = profile.toJson();
-    await _persist();
+    _stateCache[_profileKey] = profile.toJson();
+    await _persistState();
   }
 
   CampusProfile? get profile {
-    final value = _cache[_profileKey];
+    final value = _stateCache[_profileKey];
     if (value == null) {
       return null;
     }
@@ -97,7 +106,7 @@ class LocalStorageService {
   }
 
   double? _readDouble(String key) {
-    final value = _cache[key];
+    final value = _stateCache[key];
     if (value == null) {
       return null;
     }
@@ -109,7 +118,7 @@ class LocalStorageService {
   }
 
   String? _readNonEmptyString(String key) {
-    final value = _cache[key];
+    final value = _stateCache[key];
     if (value == null) {
       return null;
     }
@@ -120,8 +129,86 @@ class LocalStorageService {
     return text;
   }
 
-  Future<void> _persist() async {
-    await _file.writeAsString(jsonEncode(_cache), flush: true);
+  Future<void> _persistState() async {
+    await _writeJsonAtomic(_stateFile, _stateCache);
+  }
+
+  Future<void> _persistTransactions() async {
+    await _writeJsonAtomic(_transactionsFile, _transactionsBySid);
+  }
+
+  static Future<void> _writeJsonAtomic(
+    File target,
+    Map<String, dynamic> payload,
+  ) async {
+    final temp = File('${target.path}.tmp');
+    await temp.writeAsString(jsonEncode(payload), flush: true);
+    if (await target.exists()) {
+      await target.delete();
+    }
+    await temp.rename(target.path);
+  }
+
+  static Future<Map<String, dynamic>> _readMapFromFile(File file) async {
+    if (!await file.exists()) {
+      return <String, dynamic>{};
+    }
+    try {
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) {
+        return <String, dynamic>{};
+      }
+      final parsed = jsonDecode(raw);
+      if (parsed is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(parsed);
+      }
+      if (parsed is Map) {
+        return Map<String, dynamic>.from(parsed);
+      }
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<void> _migrateLegacyTransactionsIfNeeded() async {
+    if (_transactionsBySid.isNotEmpty) {
+      return;
+    }
+    final legacy = _stateCache[_transactionsBySidKey];
+    final migrated = _parseMapLike(legacy);
+    if (migrated.isEmpty) {
+      return;
+    }
+    _transactionsBySid
+      ..clear()
+      ..addAll(migrated);
+    _stateCache.remove(_transactionsBySidKey);
+    await _persistTransactions();
+    await _persistState();
+  }
+
+  static Map<String, dynamic> _parseMapLike(Object? raw) {
+    if (raw is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(raw);
+    }
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(raw);
+        if (parsed is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(parsed);
+        }
+        if (parsed is Map) {
+          return Map<String, dynamic>.from(parsed);
+        }
+      } catch (_) {
+        return <String, dynamic>{};
+      }
+    }
+    return <String, dynamic>{};
   }
 
   double? get currentBalance {
@@ -146,11 +233,11 @@ class LocalStorageService {
     required String lastSyncAt,
     required String lastSyncDay,
   }) async {
-    _cache[_balanceKey] = balance;
-    _cache[_balanceUpdatedAtKey] = balanceUpdatedAt;
-    _cache[_lastSyncAtKey] = lastSyncAt;
-    _cache[_lastSyncDayKey] = lastSyncDay;
-    await _persist();
+    _stateCache[_balanceKey] = balance;
+    _stateCache[_balanceUpdatedAtKey] = balanceUpdatedAt;
+    _stateCache[_lastSyncAtKey] = lastSyncAt;
+    _stateCache[_lastSyncDayKey] = lastSyncDay;
+    await _persistState();
   }
 
   Future<void> saveTransactions(
@@ -161,10 +248,8 @@ class LocalStorageService {
     if (key.isEmpty) {
       return;
     }
-    final map = _readTransactionsBySid();
-    map[key] = rows.map((item) => item.toJson()).toList();
-    _cache[_transactionsBySidKey] = map;
-    await _persist();
+    _transactionsBySid[key] = rows.map((item) => item.toJson()).toList();
+    await _persistTransactions();
   }
 
   List<TransactionRecord> loadTransactions(String sid) {
@@ -172,8 +257,7 @@ class LocalStorageService {
     if (key.isEmpty) {
       return <TransactionRecord>[];
     }
-    final map = _readTransactionsBySid();
-    final raw = map[key];
+    final raw = _transactionsBySid[key];
     if (raw is! List) {
       return <TransactionRecord>[];
     }
@@ -191,32 +275,8 @@ class LocalStorageService {
     return out;
   }
 
-  Map<String, dynamic> _readTransactionsBySid() {
-    final raw = _cache[_transactionsBySidKey];
-    if (raw is Map<String, dynamic>) {
-      return Map<String, dynamic>.from(raw);
-    }
-    if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
-    }
-    if (raw is String && raw.isNotEmpty) {
-      try {
-        final parsed = jsonDecode(raw);
-        if (parsed is Map<String, dynamic>) {
-          return Map<String, dynamic>.from(parsed);
-        }
-        if (parsed is Map) {
-          return Map<String, dynamic>.from(parsed);
-        }
-      } catch (_) {
-        return <String, dynamic>{};
-      }
-    }
-    return <String, dynamic>{};
-  }
-
   Future<void> clearAll() async {
-    _cache
+    _stateCache
       ..remove(_sidKey)
       ..remove(_passwordKey)
       ..remove(_profileKey)
@@ -226,6 +286,8 @@ class LocalStorageService {
       ..remove(_lastSyncDayKey)
       ..remove(_selectedMonthKey)
       ..remove(_transactionsBySidKey);
-    await _persist();
+    _transactionsBySid.clear();
+    await _persistState();
+    await _persistTransactions();
   }
 }
