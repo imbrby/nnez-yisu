@@ -9,10 +9,12 @@ class AppLogService {
   static final AppLogService instance = AppLogService._();
 
   static const int _maxLogFileBytes = 1024 * 1024;
+  static const int _flushIntervalMs = 500;
 
   File? _logFile;
   bool _initialized = false;
-  Future<void> _queue = Future<void>.value();
+  final StringBuffer _buffer = StringBuffer();
+  bool _flushScheduled = false;
 
   String? get logPath => _logFile?.path;
 
@@ -27,15 +29,15 @@ class AppLogService {
     _logFile = File(path.join(logsDir.path, 'app.log'));
     _initialized = true;
     await _rotateIfNeeded();
-    await info('===== New Session =====', tag: 'BOOT');
+    await _appendAndFlush('===== New Session =====', level: 'INFO', tag: 'BOOT');
   }
 
   Future<void> info(String message, {String tag = 'APP'}) {
-    return _write(level: 'INFO', tag: tag, message: message);
+    return _append(level: 'INFO', tag: tag, message: message);
   }
 
   Future<void> warn(String message, {String tag = 'APP'}) {
-    return _write(level: 'WARN', tag: tag, message: message);
+    return _append(level: 'WARN', tag: tag, message: message);
   }
 
   Future<void> error(
@@ -44,32 +46,31 @@ class AppLogService {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    final buffer = StringBuffer(message);
+    final buf = StringBuffer(message);
     if (error != null) {
-      buffer
+      buf
         ..write('\nerror: ')
         ..write(error);
     }
     if (stackTrace != null) {
-      buffer
+      buf
         ..write('\nstack:\n')
         ..write(stackTrace);
     }
-    return _write(level: 'ERROR', tag: tag, message: buffer.toString());
+    return _append(level: 'ERROR', tag: tag, message: buf.toString());
   }
 
   Future<void> clear() async {
-    await _enqueue(() async {
-      final file = _logFile;
-      if (file == null) {
-        return;
-      }
+    await flush();
+    final file = _logFile;
+    if (file != null) {
       await file.writeAsString('', flush: true);
-    });
-    await info('日志已清空', tag: 'LOG');
+    }
+    await _appendAndFlush('日志已清空', level: 'INFO', tag: 'LOG');
   }
 
   Future<String> readRecent({int maxLines = 300}) async {
+    await flush();
     final file = _logFile;
     if (file == null || !await file.exists()) {
       return '';
@@ -86,22 +87,52 @@ class AppLogService {
     return lines.sublist(start).join('\n');
   }
 
-  Future<void> _write({
+  Future<void> _append({
     required String level,
     required String tag,
     required String message,
-  }) {
-    return _enqueue(() async {
-      final file = _logFile;
-      if (file == null) {
-        return;
-      }
-      await _rotateIfNeeded();
-      final now = DateTime.now().toIso8601String();
-      final normalized = message.replaceAll('\r\n', '\n');
-      final entry = '[$now][$level][$tag] $normalized\n';
-      await file.writeAsString(entry, mode: FileMode.append, flush: true);
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final normalized = message.replaceAll('\r\n', '\n');
+    _buffer.write('[$now][$level][$tag] $normalized\n');
+    _scheduleFlush();
+  }
+
+  Future<void> _appendAndFlush(
+    String message, {
+    required String level,
+    required String tag,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final normalized = message.replaceAll('\r\n', '\n');
+    _buffer.write('[$now][$level][$tag] $normalized\n');
+    await flush();
+  }
+
+  void _scheduleFlush() {
+    if (_flushScheduled) {
+      return;
+    }
+    _flushScheduled = true;
+    Future<void>.delayed(const Duration(milliseconds: _flushIntervalMs), () {
+      _flushScheduled = false;
+      flush();
     });
+  }
+
+  Future<void> flush() async {
+    final file = _logFile;
+    if (file == null || _buffer.isEmpty) {
+      return;
+    }
+    final data = _buffer.toString();
+    _buffer.clear();
+    try {
+      await file.writeAsString(data, mode: FileMode.append, flush: true);
+      await _rotateIfNeeded();
+    } catch (_) {
+      // Silently drop log data on write failure to avoid cascading errors.
+    }
   }
 
   Future<void> _rotateIfNeeded() async {
@@ -126,10 +157,5 @@ class AppLogService {
       throw StateError('无法获取外部私有目录。');
     }
     return Directory(path.join(external.path, 'logs'));
-  }
-
-  Future<void> _enqueue(Future<void> Function() action) {
-    _queue = _queue.then((_) => action()).catchError((_) {});
-    return _queue;
   }
 }
