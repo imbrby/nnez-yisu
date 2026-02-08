@@ -25,7 +25,8 @@ class CampusApiClient {
     );
 
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 10);
+      ..connectionTimeout = const Duration(seconds: 10)
+      ..idleTimeout = const Duration(seconds: 3);
     final session = _CampusSession();
 
     try {
@@ -34,7 +35,6 @@ class CampusApiClient {
       _logInfo('session bootstrap ok cookies=${session.cookieCount}');
 
       _emitProgress(onProgress, '正在初始化验证码会话...');
-      await _waitRandom(120, 320);
       final authTypeResp = await _postForm(
         client: client,
         session: session,
@@ -44,7 +44,6 @@ class CampusApiClient {
       );
       _logInfo('POST loginauthtype done status=${authTypeResp.statusCode}');
 
-      await _waitRandom(220, 620);
       final verifyResp = await _get(
         client: client,
         session: session,
@@ -84,7 +83,6 @@ class CampusApiClient {
       List<dynamic> rawData = <dynamic>[];
       if (includeTransactions) {
         _emitProgress(onProgress, '正在拉取消费流水...');
-        await _waitRandom(260, 760);
         final recordsResp = await _postForm(
           client: client,
           session: session,
@@ -234,6 +232,7 @@ class CampusApiClient {
     bool readText = true,
   }) async {
     final uri = Uri.parse('$_baseUrl$path');
+    _logInfo('$method $path openUrl');
     final request = await client.openUrl(method, uri).timeout(_stepTimeout);
 
     if (headers != null) {
@@ -249,17 +248,21 @@ class CampusApiClient {
       request.add(bytes);
     }
 
+    _logInfo('$method $path close');
     final response = await request.close().timeout(_stepTimeout);
     session.absorb(response.headers);
 
     if (!readText) {
       await response.drain<List<int>>(<int>[]).timeout(_stepTimeout);
+      _logInfo('$method $path drained');
       return _HttpResponse(statusCode: response.statusCode, body: '');
     }
 
+    _logInfo('$method $path reading body');
     final text = await const Utf8Decoder(
       allowMalformed: true,
     ).bind(response).join().timeout(_stepTimeout);
+    _logInfo('$method $path done status=${response.statusCode}');
     return _HttpResponse(statusCode: response.statusCode, body: text);
   }
 
@@ -416,11 +419,6 @@ class CampusApiClient {
             payload['info'] ??
             '未知错误')
         .toString();
-  }
-
-  Future<void> _waitRandom(int minMs, int maxMs) async {
-    final value = minMs + Random().nextInt(maxMs - minMs + 1);
-    await Future<void>.delayed(Duration(milliseconds: value));
   }
 
   void _emitProgress(
