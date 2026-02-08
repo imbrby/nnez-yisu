@@ -11,6 +11,10 @@ class HomePage extends StatelessWidget {
     required this.isSyncing,
     required this.onRefresh,
     required this.monthlySummary,
+    required this.monthLabel,
+    required this.canGoNext,
+    required this.onPrevMonth,
+    required this.onNextMonth,
   });
 
   final CanteenRepository? repository;
@@ -18,6 +22,10 @@ class HomePage extends StatelessWidget {
   final bool isSyncing;
   final VoidCallback onRefresh;
   final MonthlySummary? monthlySummary;
+  final String monthLabel;
+  final bool canGoNext;
+  final VoidCallback onPrevMonth;
+  final VoidCallback onNextMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -106,96 +114,97 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             // Monthly Summary Card
-            if (summary != null) ...[
-              Card(
-                elevation: 2,
-                shadowColor: colorScheme.shadow.withValues(alpha: 0.3),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            Card(
+              elevation: 2,
+              shadowColor: colorScheme.shadow.withValues(alpha: 0.3),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_month_outlined,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '消费汇总',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left, size: 20),
+                          onPressed: onPrevMonth,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                        Text(
+                          monthLabel,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right, size: 20),
+                          onPressed: canGoNext ? onNextMonth : null,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                      ],
+                    ),
+                    if (summary != null) ...[
+                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          Icon(
-                            Icons.calendar_month_outlined,
-                            color: colorScheme.primary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '当月消费汇总',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '本月统计',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                          Expanded(child: _StatItem(label: '总消费', value: '¥${summary.totalSpent.toStringAsFixed(2)}', icon: Icons.payments_outlined, colorScheme: colorScheme)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _StatItem(label: '总笔数', value: '${summary.transactionCount}', hint: '消费记录数', icon: Icons.receipt_long_outlined, colorScheme: colorScheme)),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      // Stats Grid
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
+                      const SizedBox(height: 12),
+                      Row(
                         children: [
-                          _StatItem(
-                            label: '总消费',
-                            value: '¥${summary.totalSpent.toStringAsFixed(2)}',
-                            icon: Icons.payments_outlined,
-                            colorScheme: colorScheme,
-                          ),
-                          _StatItem(
-                            label: '总笔数',
-                            value: '${summary.transactionCount}',
-                            hint: '消费记录数',
-                            icon: Icons.receipt_long_outlined,
-                            colorScheme: colorScheme,
-                          ),
-                          _StatItem(
-                            label: '活跃日均',
-                            value: '¥${summary.avgPerActiveDay.toStringAsFixed(2)}',
-                            hint: '总额 / 活跃天数',
-                            icon: Icons.trending_up_outlined,
-                            colorScheme: colorScheme,
-                          ),
-                          _StatItem(
-                            label: '活跃天数',
-                            value: '${summary.activeDays}',
-                            hint: '当日有消费',
-                            icon: Icons.event_available_outlined,
-                            colorScheme: colorScheme,
-                          ),
-                          _StatItem(
-                            label: '单笔均消费',
-                            value: '¥${summary.avgPerTransaction.toStringAsFixed(2)}',
-                            hint: '总额 / 笔数',
-                            icon: Icons.analytics_outlined,
-                            colorScheme: colorScheme,
-                          ),
-                          _StatItem(
-                            label: '单日峰值',
-                            value: '¥${summary.maxDailySpent.toStringAsFixed(2)}',
-                            icon: Icons.arrow_upward_outlined,
-                            colorScheme: colorScheme,
-                          ),
+                          Expanded(child: _StatItem(label: '活跃日均', value: '¥${summary.avgPerActiveDay.toStringAsFixed(2)}', hint: '总额 / 活跃天数', icon: Icons.trending_up_outlined, colorScheme: colorScheme)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _StatItem(label: '活跃天数', value: '${summary.activeDays}', hint: '当日有消费', icon: Icons.event_available_outlined, colorScheme: colorScheme)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _StatItem(label: '单笔均消费', value: '¥${summary.avgPerTransaction.toStringAsFixed(2)}', hint: '总额 / 笔数', icon: Icons.analytics_outlined, colorScheme: colorScheme)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _StatItem(label: '单日峰值', value: '¥${summary.maxDailySpent.toStringAsFixed(2)}', icon: Icons.arrow_upward_outlined, colorScheme: colorScheme)),
                         ],
                       ),
                     ],
-                  ),
+                    if (summary == null) ...[
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Text(
+                          '暂无数据，请刷新',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
+            ),
             ],
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
 }
 
 class _RefreshButton extends StatelessWidget {
@@ -280,7 +289,6 @@ class _StatItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      width: 150,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,

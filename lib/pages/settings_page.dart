@@ -20,17 +20,10 @@ class SettingsPage extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar.large(
-            title: const Text('设置'),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          const SizedBox(height: 40),
                   // User Profile Card
                   if (data != null) ...[
                     Card(
@@ -44,14 +37,10 @@ class SettingsPage extends StatelessWidget {
                             CircleAvatar(
                               radius: 40,
                               backgroundColor: colorScheme.primaryContainer,
-                              child: Text(
-                                data.studentName.isNotEmpty
-                                    ? data.studentName[0]
-                                    : '?',
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              child: Icon(
+                                Icons.person,
+                                size: 40,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -164,10 +153,6 @@ class SettingsPage extends StatelessWidget {
                       ),
                     ),
                   ],
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

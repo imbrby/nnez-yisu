@@ -97,7 +97,8 @@ class _AppShellState extends State<AppShell> {
   bool _syncing = false;
   bool _settingUp = false;
   int _tabIndex = 0;
-  List<TransactionRecord> _transactions = [];
+  final Map<String, List<TransactionRecord>> _transactionsByMonth = {};
+  late String _selectedMonth = _currentMonthKey();
 
   @override
   void initState() {
@@ -155,9 +156,10 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       _profile = repo.profile;
-      _transactions = transactions;
+      _transactionsByMonth[_currentMonthKey()] = transactions;
+      _selectedMonth = _currentMonthKey();
       setState(() {
-        _status = '刷新完成。';
+        _status = '刷新完成';
       });
       _logInfo('刷新完成，获取到 ${transactions.length} 条流水');
     } catch (error, stackTrace) {
@@ -183,7 +185,7 @@ class _AppShellState extends State<AppShell> {
     final password = _passwordController.text;
     if (sid.isEmpty || password.isEmpty) {
       setState(() {
-        _status = '请输入食堂账号和密码。';
+        _status = '请输入食堂账号和密码';
       });
       return;
     }
@@ -211,7 +213,7 @@ class _AppShellState extends State<AppShell> {
       _sidController.clear();
       _passwordController.clear();
       setState(() {
-        _status = '初始化完成。请点右下角刷新同步余额。';
+        _status = '初始化完成，请点右下角刷新同步余额';
       });
       _logInfo('初始化账号完成');
     } catch (error, stackTrace) {
@@ -242,7 +244,7 @@ class _AppShellState extends State<AppShell> {
       if (!mounted) return;
       setState(() {
         _profile = null;
-        _status = '已登出。';
+        _status = '已登出';
         _tabIndex = 0;
       });
       _logInfo('登出完成');
@@ -263,6 +265,31 @@ class _AppShellState extends State<AppShell> {
     );
     final cleaned = cleanedTimeout.replaceFirst(RegExp(r'^Exception:\s*'), '');
     return cleaned.trim().isEmpty ? '未知错误' : cleaned.trim();
+  }
+
+  static String _currentMonthKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  }
+
+  static String _monthLabel(String key) {
+    final parts = key.split('-');
+    if (parts.length == 2) return '${parts[0]}年${int.parse(parts[1])}月';
+    return key;
+  }
+
+  void _switchMonth(int delta) {
+    final parts = _selectedMonth.split('-');
+    if (parts.length != 2) return;
+    final year = int.parse(parts[0]);
+    final month = int.parse(parts[1]);
+    final d = DateTime(year, month + delta, 1);
+    final newKey = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+    // Don't go beyond current month
+    if (newKey.compareTo(_currentMonthKey()) > 0) return;
+    setState(() {
+      _selectedMonth = newKey;
+    });
   }
 
   @override
@@ -294,23 +321,24 @@ class _AppShellState extends State<AppShell> {
     }
 
     // 计算月度统计
+    final selectedTransactions = _transactionsByMonth[_selectedMonth] ?? [];
     MonthlySummary? monthlySummary;
-    if (_transactions.isNotEmpty) {
-      final totalExpense = _transactions.fold<double>(
+    if (selectedTransactions.isNotEmpty) {
+      final totalExpense = selectedTransactions.fold<double>(
         0.0,
         (sum, txn) => sum + txn.amount.abs(),
       );
-      final totalCount = _transactions.length;
+      final totalCount = selectedTransactions.length;
 
       // 计算活跃天数
-      final activeDays = _transactions
+      final activeDays = selectedTransactions
           .map((txn) => txn.occurredDay)
           .toSet()
           .length;
 
       // 计算单日峰值
       final dailyTotals = <String, double>{};
-      for (final txn in _transactions) {
+      for (final txn in selectedTransactions) {
         dailyTotals[txn.occurredDay] =
             (dailyTotals[txn.occurredDay] ?? 0.0) + txn.amount.abs();
       }
@@ -336,6 +364,10 @@ class _AppShellState extends State<AppShell> {
           status: _status,
           isSyncing: _syncing,
           monthlySummary: monthlySummary,
+          monthLabel: _monthLabel(_selectedMonth),
+          canGoNext: _selectedMonth.compareTo(_currentMonthKey()) < 0,
+          onPrevMonth: () => _switchMonth(-1),
+          onNextMonth: () => _switchMonth(1),
           onRefresh: _syncNow,
         ),
         SettingsPage(
