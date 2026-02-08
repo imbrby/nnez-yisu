@@ -317,8 +317,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     bool includeTransactions = false,
     int? lookbackDays,
   }) async {
+    _logInfo(
+      'syncNow entry auto=$auto settingUp=$_settingUp syncing=$_syncing',
+    );
     final repo = _repository;
     if (repo == null || !repo.hasCredential || _settingUp || _syncing) {
+      _logInfo('syncNow skipped: precondition not met');
       return;
     }
     _logInfo(
