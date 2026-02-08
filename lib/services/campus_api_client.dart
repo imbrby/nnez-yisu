@@ -103,34 +103,6 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
     }
     logInfo('login success');
 
-    List<dynamic> rawData = <dynamic>[];
-    if (params.includeTransactions) {
-      final recordsResp = await _postForm(
-        client: client,
-        session: session,
-        path: '/interface/index',
-        payload: <String, String>{
-          'method': 'getecardxfmx',
-          'stuid': '1',
-          'carno': params.sid,
-          'starttime': params.startDate,
-          'endtime': params.endDate,
-        },
-        refererPath: '/mobile/yktxfjl',
-        logInfo: logInfo,
-      );
-      final recordsJson = _decodeJson(recordsResp.body);
-      if (recordsResp.statusCode != 200) {
-        throw Exception('查询流水失败 (${recordsResp.statusCode})');
-      }
-      final parsed = recordsJson['data'];
-      if (!_isSuccess(recordsJson) || parsed is! List) {
-        throw Exception('查询流水失败：${_extractMessage(recordsJson)}');
-      }
-      rawData = parsed;
-      logInfo('transactions fetched rows=${rawData.length}');
-    }
-
     final balance =
         await _fetchBalance(client, session, params.sid, logInfo);
     logInfo('balance fetched value=${balance.toStringAsFixed(2)}');
@@ -140,14 +112,9 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
       'profile fetched sid=${profile.sid} name=${profile.studentName}',
     );
 
-    final rows = params.includeTransactions
-        ? _toRecords(sid: params.sid, rawList: rawData)
-        : <TransactionRecord>[];
-    logInfo('records normalized rows=${rows.length}');
-
     final payload = CampusSyncPayload(
       profile: profile,
-      transactions: rows,
+      transactions: <TransactionRecord>[],
       balance: balance,
       balanceUpdatedAt: DateTime.now(),
     );
@@ -355,55 +322,6 @@ Future<CampusProfile> _fetchProfile(
   }
   logInfo('fetchProfile done');
   return CampusProfile.fromRemote(data);
-}
-// PLACEHOLDER_PARSE_HELPERS
-
-List<TransactionRecord> _toRecords({
-  required String sid,
-  required List<dynamic> rawList,
-}) {
-  final records = <TransactionRecord>[];
-  for (final row in rawList) {
-    if (row is! Map<String, dynamic>) continue;
-    final normalized = _normalizeRow(sid, row);
-    if (normalized != null) records.add(normalized);
-  }
-  return records;
-}
-
-TransactionRecord? _normalizeRow(String sid, Map<String, dynamic> row) {
-  final txnId = (row['Id'] ?? '').toString().trim();
-  if (txnId.isEmpty) return null;
-  final amount = double.tryParse((row['Money'] ?? '').toString());
-  if (amount == null) return null;
-  final balance = double.tryParse((row['Balance'] ?? '').toString());
-  final time = _normalizeCampusTime((row['Time'] ?? '').toString());
-  if (time == null) return null;
-  return TransactionRecord(
-    sid: sid,
-    txnId: txnId,
-    amount: amount.abs(),
-    balance: balance,
-    occurredAt: time.$2,
-    occurredDay: time.$1,
-    itemName: (row['ItemName'] ?? '').toString().trim().isEmpty
-        ? '未知消费点'
-        : (row['ItemName'] ?? '').toString().trim(),
-    rawPayload: '{}',
-  );
-}
-
-({String $1, String $2})? _normalizeCampusTime(String input) {
-  final match = RegExp(
-    r'^(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$',
-  ).firstMatch(input);
-  if (match == null) return null;
-  String pad(String v) => v.padLeft(2, '0');
-  final day =
-      '${match.group(1)!}-${pad(match.group(2)!)}-${pad(match.group(3)!)}';
-  final datetime =
-      '$day ${pad(match.group(4)!)}:${pad(match.group(5)!)}:${pad(match.group(6)!)}';
-  return ($1: day, $2: datetime);
 }
 
 Map<String, dynamic> _decodeJson(String? raw) {

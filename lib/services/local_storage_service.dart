@@ -15,10 +15,6 @@ class LocalStorageService {
   static const _profileKey = 'campus_profile';
   static const _balanceKey = 'current_balance';
   static const _balanceUpdatedAtKey = 'balance_updated_at';
-  static const _lastSyncAtKey = 'last_sync_at';
-  static const _lastSyncDayKey = 'last_sync_day';
-  static const _selectedMonthKey = 'selected_month';
-  static const _legacyTxPrefix = 'transactions_sid_';
 
   static Future<LocalStorageService> create() async {
     final watch = Stopwatch()..start();
@@ -38,16 +34,6 @@ class LocalStorageService {
 
   String get campusPassword {
     return _prefs.getString(_passwordKey) ?? '';
-  }
-
-  String get selectedMonth {
-    return _prefs.getString(_selectedMonthKey) ?? '';
-  }
-
-  Future<void> saveSelectedMonth(String month) async {
-    await _enqueueWrite('saveSelectedMonth', () async {
-      await _prefs.setString(_selectedMonthKey, month);
-    });
   }
 
   Future<void> saveCredentials({
@@ -86,7 +72,7 @@ class LocalStorageService {
     return null;
   }
 
-  double? get currentBalance {
+  double? get balance {
     return _prefs.getDouble(_balanceKey);
   }
 
@@ -98,33 +84,13 @@ class LocalStorageService {
     return value;
   }
 
-  String? get lastSyncAt {
-    final value = _prefs.getString(_lastSyncAtKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
-  }
-
-  String? get lastSyncDay {
-    final value = _prefs.getString(_lastSyncDayKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
-  }
-
   Future<void> saveSyncMeta({
     required double balance,
     required String balanceUpdatedAt,
-    required String lastSyncAt,
-    required String lastSyncDay,
   }) async {
     await _enqueueWrite('saveSyncMeta', () async {
       await _prefs.setDouble(_balanceKey, balance);
       await _prefs.setString(_balanceUpdatedAtKey, balanceUpdatedAt);
-      await _prefs.setString(_lastSyncAtKey, lastSyncAt);
-      await _prefs.setString(_lastSyncDayKey, lastSyncDay);
     });
   }
 
@@ -135,21 +101,6 @@ class LocalStorageService {
       await _prefs.remove(_profileKey);
       await _prefs.remove(_balanceKey);
       await _prefs.remove(_balanceUpdatedAtKey);
-      await _prefs.remove(_lastSyncAtKey);
-      await _prefs.remove(_lastSyncDayKey);
-      await _prefs.remove(_selectedMonthKey);
-    });
-  }
-
-  Future<void> removeLegacyTransactionKeys() async {
-    await _enqueueWrite('removeLegacyTransactionKeys', () async {
-      final keys = _prefs.getKeys();
-      for (final key in keys) {
-        if (!key.startsWith(_legacyTxPrefix)) {
-          continue;
-        }
-        await _prefs.remove(key);
-      }
     });
   }
 

@@ -1,26 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/time_utils.dart';
-import 'package:mobile_app/models/home_summary.dart';
+import 'package:mobile_app/services/canteen_repository.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
-    required this.summary,
-    required this.hasCredential,
-    required this.isSyncing,
+    required this.repository,
     required this.status,
-    required this.onMonthChanged,
   });
 
-  final HomeSummary? summary;
-  final bool hasCredential;
-  final bool isSyncing;
+  final CanteenRepository? repository;
   final String status;
-  final ValueChanged<String> onMonthChanged;
 
   @override
   Widget build(BuildContext context) {
-    final data = summary;
+    final repo = repository;
+    final balance = repo?.balance;
+    final balanceUpdatedAt = repo?.balanceUpdatedAt;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -39,16 +35,14 @@ class HomePage extends StatelessWidget {
                 const Text('当前余额'),
                 const SizedBox(height: 8),
                 Text(
-                  data?.currentBalance == null
-                      ? '-'
-                      : '¥${data!.currentBalance!.toStringAsFixed(2)}',
+                  balance == null ? '-' : '¥${balance.toStringAsFixed(2)}',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  data?.balanceUpdatedAt == null
+                  balanceUpdatedAt == null || balanceUpdatedAt.isEmpty
                       ? '未同步'
-                      : '更新于 ${formatDateTime(data!.balanceUpdatedAt)}',
+                      : '更新于 ${formatDateTime(balanceUpdatedAt)}',
                 ),
               ],
             ),
