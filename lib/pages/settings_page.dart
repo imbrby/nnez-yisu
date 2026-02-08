@@ -11,11 +11,15 @@ class SettingsPage extends StatelessWidget {
     super.key,
     required this.profile,
     required this.onLogout,
+    required this.onExport,
+    required this.onImport,
     required this.isBusy,
   });
 
   final CampusProfile? profile;
   final VoidCallback onLogout;
+  final VoidCallback onExport;
+  final VoidCallback onImport;
   final bool isBusy;
 
   @override
@@ -108,6 +112,29 @@ class SettingsPage extends StatelessWidget {
                               title: const Text('班级'),
                               trailing: Text(data.className, style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant)),
                             ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Data Management Card
+                    Card(
+                      elevation: 0,
+                      color: colorScheme.surfaceContainerHighest,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: Icon(Icons.upload_outlined, color: colorScheme.primary),
+                            title: const Text('导出数据'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: isBusy ? null : onExport,
+                          ),
+                          const Divider(height: 1, indent: 56),
+                          ListTile(
+                            leading: Icon(Icons.download_outlined, color: colorScheme.primary),
+                            title: const Text('导入数据'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: isBusy ? null : onImport,
+                          ),
                         ],
                       ),
                     ),

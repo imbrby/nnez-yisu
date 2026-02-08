@@ -11,12 +11,21 @@ class LocalStorageService {
   final SharedPreferences _prefs;
   Future<void> _writeQueue = Future<void>.value();
 
+  // Active session keys
   static const _sidKey = 'campus_sid';
   static const _passwordKey = 'campus_password';
-  static const _profileKey = 'campus_profile';
-  static const _balanceKey = 'current_balance';
-  static const _balanceUpdatedAtKey = 'balance_updated_at';
-  static const _transactionsKey = 'transactions_by_month';
+  static const _activeSidKey = 'active_sid';
+
+  // Legacy flat keys (for migration only)
+  static const _legacyProfileKey = 'campus_profile';
+  static const _legacyBalanceKey = 'current_balance';
+  static const _legacyBalanceUpdatedAtKey = 'balance_updated_at';
+  static const _legacyTransactionsKey = 'transactions_by_month';
+
+  // Per-user key helpers
+  static String _userProfileKey(String sid) => 'user_${sid}_profile';
+  static String _userBalanceKey(String sid) => 'user_${sid}_balance';
+  static String _userBalanceUpdatedAtKey(String sid) => 'user_${sid}_balance_updated_at';
 
   static Future<LocalStorageService> create() async {
     final watch = Stopwatch()..start();
@@ -26,16 +35,24 @@ class LocalStorageService {
     return service;
   }
 
-  bool get hasCredential {
-    return campusSid.isNotEmpty && campusPassword.isNotEmpty;
-  }
+  // --- Active session ---
 
-  String get campusSid {
-    return (_prefs.getString(_sidKey) ?? '').trim();
-  }
+  bool get hasCredential => campusSid.isNotEmpty && campusPassword.isNotEmpty;
 
-  String get campusPassword {
-    return _prefs.getString(_passwordKey) ?? '';
+  String get campusSid => (_prefs.getString(_sidKey) ?? '').trim();
+
+  String get campusPassword => _prefs.getString(_passwordKey) ?? '';
+
+  String? get activeSid => _prefs.getString(_activeSidKey);
+
+  Future<void> setActiveSid(String? sid) async {
+    await _enqueueWrite('setActiveSid', () async {
+      if (sid == null) {
+        await _prefs.remove(_activeSidKey);
+      } else {
+        await _prefs.setString(_activeSidKey, sid);
+      }
+    });
   }
 
   Future<void> saveCredentials({
@@ -48,66 +65,95 @@ class LocalStorageService {
     });
   }
 
-  Future<void> saveProfile(CampusProfile profile) async {
+  // --- Per-user profile ---
+
+  Future<void> saveProfile(CampusProfile profile, {String? sid}) async {
+    final key = _userProfileKey(sid ?? campusSid);
     await _enqueueWrite('saveProfile', () async {
-      await _prefs.setString(_profileKey, jsonEncode(profile.toJson()));
+      await _prefs.setString(key, jsonEncode(profile.toJson()));
     });
   }
 
-  CampusProfile? get profile {
-    final raw = _prefs.getString(_profileKey);
-    if (raw == null || raw.trim().isEmpty) {
-      return null;
-    }
+  CampusProfile? getProfile({String? sid}) {
+    final key = _userProfileKey(sid ?? campusSid);
+    final raw = _prefs.getString(key);
+    if (raw == null || raw.trim().isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return CampusProfile.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return CampusProfile.fromJson(Map<String, dynamic>.from(decoded));
-      }
+      if (decoded is Map<String, dynamic>) return CampusProfile.fromJson(decoded);
+      if (decoded is Map) return CampusProfile.fromJson(Map<String, dynamic>.from(decoded));
     } catch (error) {
       _logInfo('profile parse failed: $error');
-      return null;
     }
     return null;
   }
 
-  double? get balance {
-    return _prefs.getDouble(_balanceKey);
-  }
+  CampusProfile? get profile => getProfile();
 
-  String? get balanceUpdatedAt {
-    final value = _prefs.getString(_balanceUpdatedAtKey);
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    return value;
-  }
+  // --- Per-user balance ---
 
   Future<void> saveSyncMeta({
     required double balance,
     required String balanceUpdatedAt,
+    String? sid,
   }) async {
+    final s = sid ?? campusSid;
     await _enqueueWrite('saveSyncMeta', () async {
-      await _prefs.setDouble(_balanceKey, balance);
-      await _prefs.setString(_balanceUpdatedAtKey, balanceUpdatedAt);
+      await _prefs.setDouble(_userBalanceKey(s), balance);
+      await _prefs.setString(_userBalanceUpdatedAtKey(s), balanceUpdatedAt);
     });
   }
 
-  Future<void> saveTransactions(Map<String, List<TransactionRecord>> byMonth) async {
-    await _enqueueWrite('saveTransactions', () async {
-      final map = <String, dynamic>{};
-      for (final entry in byMonth.entries) {
-        map[entry.key] = entry.value.map((t) => t.toJson()).toList();
-      }
-      await _prefs.setString(_transactionsKey, jsonEncode(map));
+  double? getBalance({String? sid}) => _prefs.getDouble(_userBalanceKey(sid ?? campusSid));
+  double? get balance => getBalance();
+
+  String? getBalanceUpdatedAt({String? sid}) {
+    final value = _prefs.getString(_userBalanceUpdatedAtKey(sid ?? campusSid));
+    return (value == null || value.isEmpty) ? null : value;
+  }
+  String? get balanceUpdatedAt => getBalanceUpdatedAt();
+
+  // --- Logout (preserve per-user data) ---
+
+  Future<void> clearActiveSession() async {
+    await _enqueueWrite('clearActiveSession', () async {
+      await _prefs.remove(_sidKey);
+      await _prefs.remove(_passwordKey);
+      await _prefs.remove(_activeSidKey);
     });
   }
 
-  Map<String, List<TransactionRecord>> loadTransactions() {
-    final raw = _prefs.getString(_transactionsKey);
+  // --- Legacy migration ---
+
+  Future<void> migrateToPerUser() async {
+    final sid = campusSid;
+    if (sid.isEmpty) return;
+    // Already migrated if active_sid exists
+    if (_prefs.containsKey(_activeSidKey)) return;
+    _logInfo('migrateToPerUser start sid=$sid');
+
+    final oldProfile = _prefs.getString(_legacyProfileKey);
+    if (oldProfile != null && !_prefs.containsKey(_userProfileKey(sid))) {
+      await _prefs.setString(_userProfileKey(sid), oldProfile);
+    }
+    final oldBalance = _prefs.getDouble(_legacyBalanceKey);
+    if (oldBalance != null && !_prefs.containsKey(_userBalanceKey(sid))) {
+      await _prefs.setDouble(_userBalanceKey(sid), oldBalance);
+    }
+    final oldUpdatedAt = _prefs.getString(_legacyBalanceUpdatedAtKey);
+    if (oldUpdatedAt != null && !_prefs.containsKey(_userBalanceUpdatedAtKey(sid))) {
+      await _prefs.setString(_userBalanceUpdatedAtKey(sid), oldUpdatedAt);
+    }
+    await _prefs.setString(_activeSidKey, sid);
+    // Clean old flat keys
+    await _prefs.remove(_legacyProfileKey);
+    await _prefs.remove(_legacyBalanceKey);
+    await _prefs.remove(_legacyBalanceUpdatedAtKey);
+    _logInfo('migrateToPerUser done');
+  }
+
+  Map<String, List<TransactionRecord>> loadTransactionsLegacy() {
+    final raw = _prefs.getString(_legacyTransactionsKey);
     if (raw == null || raw.isEmpty) return {};
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -120,21 +166,18 @@ class LocalStorageService {
       }
       return result;
     } catch (error) {
-      _logInfo('loadTransactions parse failed: $error');
+      _logInfo('loadTransactionsLegacy parse failed: $error');
       return {};
     }
   }
 
-  Future<void> clearAll() async {
-    await _enqueueWrite('clearAll', () async {
-      await _prefs.remove(_sidKey);
-      await _prefs.remove(_passwordKey);
-      await _prefs.remove(_profileKey);
-      await _prefs.remove(_balanceKey);
-      await _prefs.remove(_balanceUpdatedAtKey);
-      await _prefs.remove(_transactionsKey);
+  Future<void> removeLegacyTransactions() async {
+    await _enqueueWrite('removeLegacyTransactions', () async {
+      await _prefs.remove(_legacyTransactionsKey);
     });
   }
+
+  // --- Write queue ---
 
   Future<void> _enqueueWrite(String step, Future<void> Function() action) {
     final watch = Stopwatch()..start();

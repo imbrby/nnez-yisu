@@ -8,7 +8,21 @@ import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/pages/home_page.dart';
 import 'package:mobile_app/pages/settings_page.dart';
 import 'package:mobile_app/services/app_log_service.dart';
+import 'package:mobile_app/services/background_sync_service.dart';
 import 'package:mobile_app/services/canteen_repository.dart';
+import 'package:mobile_app/services/data_transfer_service.dart';
+import 'package:mobile_app/services/widget_service.dart';
+import 'package:workmanager/workmanager.dart';
+
+@pragma('vm:entry-point')
+void _workmanagerCallbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    if (task == backgroundSyncTaskName || task == Workmanager.iOSBackgroundTask) {
+      return await backgroundSyncCallback();
+    }
+    return true;
+  });
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +49,16 @@ Future<void> main() async {
     );
     return false;
   };
+
+  // Initialize Workmanager for background sync
+  await Workmanager().initialize(_workmanagerCallbackDispatcher);
+  await Workmanager().registerPeriodicTask(
+    backgroundSyncTaskName,
+    backgroundSyncTaskName,
+    frequency: const Duration(hours: 3),
+    constraints: Constraints(networkType: NetworkType.connected),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
 
   await runZonedGuarded(
     () async {
@@ -129,12 +153,23 @@ class _AppShellState extends State<AppShell> {
         _repository = repo;
         _profile = repo.profile;
       });
-      // Restore persisted transactions
-      final saved = repo.loadTransactions();
+      // Restore persisted transactions from SQLite
+      final saved = await repo.loadTransactions();
       if (saved.isNotEmpty) {
         _transactionsByMonth.addAll(saved);
       }
       _logInfo('bootstrap 完成，hasCredential=${repo.hasCredential}');
+      // Auto-sync if not synced today
+      if (repo.hasCredential) {
+        final updatedAt = repo.balanceUpdatedAt ?? '';
+        final today = _currentDayKey();
+        if (!updatedAt.startsWith(today)) {
+          _logInfo('今日未刷新，自动触发同步');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _syncNow();
+          });
+        }
+      }
     } catch (error, stackTrace) {
       _logError('bootstrap 失败', error, stackTrace);
       if (!mounted) return;
@@ -163,26 +198,23 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       _profile = repo.profile;
-      // Distribute transactions by month and merge with existing
-      final newByMonth = <String, List<TransactionRecord>>{};
-      for (final txn in transactions) {
-        final key = txn.occurredDay.substring(0, 7); // "YYYY-MM"
-        (newByMonth[key] ??= []).add(txn);
-      }
-      for (final entry in newByMonth.entries) {
-        final existing = _transactionsByMonth[entry.key] ?? [];
-        final existingIds = existing.map((t) => t.txnId).toSet();
-        final merged = [...existing];
-        for (final txn in entry.value) {
-          if (!existingIds.contains(txn.txnId)) {
-            merged.add(txn);
-          }
-        }
-        _transactionsByMonth[entry.key] = merged;
-      }
+      // Reload all transactions from SQLite (already persisted by syncNow)
+      _transactionsByMonth.clear();
+      final fresh = await repo.loadTransactions();
+      _transactionsByMonth.addAll(fresh);
       _selectedMonth = _currentMonthKey();
-      // Persist transactions
-      repo.saveTransactions(_transactionsByMonth);
+      // Update home screen widget
+      final todayKey = _currentDayKey();
+      double todaySpent = 0;
+      for (final txn in (fresh[todayKey.substring(0, 7)] ?? [])) {
+        if (txn.occurredDay == todayKey) {
+          todaySpent += txn.amount.abs();
+        }
+      }
+      WidgetService.updateWidget(
+        balance: repo.balance ?? 0,
+        todaySpent: todaySpent,
+      );
       setState(() {
         _status = '刷新成功';
       });
@@ -241,6 +273,10 @@ class _AppShellState extends State<AppShell> {
       _profile = repo.profile;
       _sidController.clear();
       _passwordController.clear();
+      // Load any existing data for this user from SQLite
+      _transactionsByMonth.clear();
+      final saved = await repo.loadTransactions();
+      _transactionsByMonth.addAll(saved);
       setState(() {
         _status = '初始化完成，请点右下角刷新同步余额';
       });
@@ -287,6 +323,53 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _exportData() async {
+    final repo = _repository;
+    if (repo == null || !repo.hasCredential) return;
+    setState(() => _status = '正在导出...');
+    try {
+      final json = await repo.exportToJson();
+      await DataTransferService.exportAndShare(json, repo.currentSid);
+      if (!mounted) return;
+      setState(() => _status = '导出完成');
+      _statusClearTimer?.cancel();
+      _statusClearTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _status = '');
+      });
+    } catch (error, stackTrace) {
+      _logError('导出失败', error, stackTrace);
+      if (!mounted) return;
+      setState(() => _status = '导出失败：${_formatError(error)}');
+    }
+  }
+
+  Future<void> _importData() async {
+    final repo = _repository;
+    if (repo == null || !repo.hasCredential) return;
+    try {
+      final jsonString = await DataTransferService.pickAndReadJsonFile();
+      if (jsonString == null) return;
+      if (!mounted) return;
+      setState(() => _status = '正在导入...');
+      final count = await repo.importFromJson(jsonString);
+      if (!mounted) return;
+      // Reload transactions from SQLite
+      _transactionsByMonth.clear();
+      final fresh = await repo.loadTransactions();
+      _transactionsByMonth.addAll(fresh);
+      _profile = repo.profile;
+      setState(() => _status = '导入完成，共 $count 条记录');
+      _statusClearTimer?.cancel();
+      _statusClearTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _status = '');
+      });
+    } catch (error, stackTrace) {
+      _logError('导入失败', error, stackTrace);
+      if (!mounted) return;
+      setState(() => _status = '导入失败：${_formatError(error)}');
+    }
+  }
+
   String _formatError(Object error) {
     final text = error.toString();
     final cleanedTimeout = text.replaceFirst(
@@ -300,6 +383,11 @@ class _AppShellState extends State<AppShell> {
   static String _currentMonthKey() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  }
+
+  static String _currentDayKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
   static String _monthLabel(String key) {
@@ -410,6 +498,8 @@ class _AppShellState extends State<AppShell> {
         SettingsPage(
           profile: _profile,
           onLogout: _logout,
+          onExport: _exportData,
+          onImport: _importData,
           isBusy: _syncing || _settingUp,
         ),
       ],

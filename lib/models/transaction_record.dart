@@ -19,6 +19,19 @@ class TransactionRecord {
   final String itemName;
   final String rawPayload;
 
+  TransactionRecord withSid(String newSid) {
+    return TransactionRecord(
+      sid: newSid,
+      txnId: txnId,
+      amount: amount,
+      balance: balance,
+      occurredAt: occurredAt,
+      occurredDay: occurredDay,
+      itemName: itemName,
+      rawPayload: rawPayload,
+    );
+  }
+
   Map<String, Object?> toDbMap() {
     return <String, Object?>{
       'sid': sid,
