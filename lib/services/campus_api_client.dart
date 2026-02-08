@@ -106,11 +106,13 @@ class CampusApiClient {
         }
         rawData = parsed;
         _logInfo('transactions fetched rows=${rawData.length}');
+        await Future<void>.delayed(const Duration(milliseconds: 200));
       }
 
       _emitProgress(onProgress, '正在查询余额...');
       final balance = await _fetchBalance(client, session, sid);
       _logInfo('balance fetched value=${balance.toStringAsFixed(2)}');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
       _emitProgress(onProgress, '正在获取个人信息...');
       final profile = await _fetchProfile(client, session);
