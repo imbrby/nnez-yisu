@@ -129,6 +129,11 @@ class _AppShellState extends State<AppShell> {
         _repository = repo;
         _profile = repo.profile;
       });
+      // Restore persisted transactions
+      final saved = repo.loadTransactions();
+      if (saved.isNotEmpty) {
+        _transactionsByMonth.addAll(saved);
+      }
       _logInfo('bootstrap 完成，hasCredential=${repo.hasCredential}');
     } catch (error, stackTrace) {
       _logError('bootstrap 失败', error, stackTrace);
@@ -176,6 +181,8 @@ class _AppShellState extends State<AppShell> {
         _transactionsByMonth[entry.key] = merged;
       }
       _selectedMonth = _currentMonthKey();
+      // Persist transactions
+      repo.saveTransactions(_transactionsByMonth);
       setState(() {
         _status = '刷新成功';
       });
@@ -268,6 +275,7 @@ class _AppShellState extends State<AppShell> {
         _profile = null;
         _status = '已登出';
         _tabIndex = 0;
+        _transactionsByMonth.clear();
       });
       _logInfo('登出完成');
     } catch (error, stackTrace) {

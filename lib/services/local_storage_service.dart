@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:mobile_app/models/campus_profile.dart';
+import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,7 @@ class LocalStorageService {
   static const _profileKey = 'campus_profile';
   static const _balanceKey = 'current_balance';
   static const _balanceUpdatedAtKey = 'balance_updated_at';
+  static const _transactionsKey = 'transactions_by_month';
 
   static Future<LocalStorageService> create() async {
     final watch = Stopwatch()..start();
@@ -94,6 +96,35 @@ class LocalStorageService {
     });
   }
 
+  Future<void> saveTransactions(Map<String, List<TransactionRecord>> byMonth) async {
+    await _enqueueWrite('saveTransactions', () async {
+      final map = <String, dynamic>{};
+      for (final entry in byMonth.entries) {
+        map[entry.key] = entry.value.map((t) => t.toJson()).toList();
+      }
+      await _prefs.setString(_transactionsKey, jsonEncode(map));
+    });
+  }
+
+  Map<String, List<TransactionRecord>> loadTransactions() {
+    final raw = _prefs.getString(_transactionsKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final result = <String, List<TransactionRecord>>{};
+      for (final entry in decoded.entries) {
+        final list = (entry.value as List)
+            .map((e) => TransactionRecord.fromJsonMap(e as Map<String, dynamic>))
+            .toList();
+        result[entry.key] = list;
+      }
+      return result;
+    } catch (error) {
+      _logInfo('loadTransactions parse failed: $error');
+      return {};
+    }
+  }
+
   Future<void> clearAll() async {
     await _enqueueWrite('clearAll', () async {
       await _prefs.remove(_sidKey);
@@ -101,6 +132,7 @@ class LocalStorageService {
       await _prefs.remove(_profileKey);
       await _prefs.remove(_balanceKey);
       await _prefs.remove(_balanceUpdatedAtKey);
+      await _prefs.remove(_transactionsKey);
     });
   }
 

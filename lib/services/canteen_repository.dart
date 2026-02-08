@@ -109,6 +109,14 @@ class CanteenRepository {
     return payload.transactions;
   }
 
+  Future<void> saveTransactions(Map<String, List<TransactionRecord>> byMonth) async {
+    await _storage.saveTransactions(byMonth);
+  }
+
+  Map<String, List<TransactionRecord>> loadTransactions() {
+    return _storage.loadTransactions();
+  }
+
   Future<void> logout() async {
     _logInfo('logout start');
     _volatileProfile = null;
