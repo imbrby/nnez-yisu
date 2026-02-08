@@ -233,37 +233,42 @@ class CampusApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl$path');
     _logInfo('$method $path openUrl');
-    final request = await client.openUrl(method, uri).timeout(_stepTimeout);
 
-    if (headers != null) {
-      for (final entry in headers.entries) {
-        request.headers.set(entry.key, entry.value);
+    Future<_HttpResponse> doRequest() async {
+      final request = await client.openUrl(method, uri);
+
+      if (headers != null) {
+        for (final entry in headers.entries) {
+          request.headers.set(entry.key, entry.value);
+        }
       }
+      session.applyTo(request.headers);
+
+      if (body != null) {
+        final bytes = utf8.encode(body);
+        request.headers.set(HttpHeaders.contentLengthHeader, bytes.length);
+        request.add(bytes);
+      }
+
+      _logInfo('$method $path close');
+      final response = await request.close();
+      session.absorb(response.headers);
+
+      if (!readText) {
+        await response.drain<List<int>>(<int>[]);
+        _logInfo('$method $path drained');
+        return _HttpResponse(statusCode: response.statusCode, body: '');
+      }
+
+      _logInfo('$method $path reading body');
+      final text = await const Utf8Decoder(
+        allowMalformed: true,
+      ).bind(response).join();
+      _logInfo('$method $path done status=${response.statusCode}');
+      return _HttpResponse(statusCode: response.statusCode, body: text);
     }
-    session.applyTo(request.headers);
 
-    if (body != null) {
-      final bytes = utf8.encode(body);
-      request.headers.set(HttpHeaders.contentLengthHeader, bytes.length);
-      request.add(bytes);
-    }
-
-    _logInfo('$method $path close');
-    final response = await request.close().timeout(_stepTimeout);
-    session.absorb(response.headers);
-
-    if (!readText) {
-      await response.drain<List<int>>(<int>[]).timeout(_stepTimeout);
-      _logInfo('$method $path drained');
-      return _HttpResponse(statusCode: response.statusCode, body: '');
-    }
-
-    _logInfo('$method $path reading body');
-    final text = await const Utf8Decoder(
-      allowMalformed: true,
-    ).bind(response).join().timeout(_stepTimeout);
-    _logInfo('$method $path done status=${response.statusCode}');
-    return _HttpResponse(statusCode: response.statusCode, body: text);
+    return doRequest().timeout(_stepTimeout);
   }
 
   Future<double> _fetchBalance(
