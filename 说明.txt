@@ -1,0 +1,106 @@
+这是一个可以正常运行的网站。现在，你需要完整阅读这个网站的代码，了解其使用的api，写一个Android程序。要求如下：
+1.使用Flutter开发。
+2.严格遵循并使用设计风格：Material Design 3。
+
+该程序的界面与功能描述如下：
+1.底部导航栏有两个板块：主页与设置。
+2.主页用文字描述如下：
+
+右下角一个悬浮的刷新图标。
+
+最上方用一个单独的框显示：
+当前余额
+¥79.50
+更新于 2026-02-06 10:07:33
+怎么好看怎么来。
+
+然后是当月消费汇总，标记以下数据
+当月消费汇总
+总消费 ¥94.90
+总笔数 12 消费记录数
+活跃日均 ¥18.98 总额 / 活跃天数
+活跃天数 5 当日有消费
+单笔平均消费 ……
+单日峰值 ¥25.30 2026-02-03
+在此处应当以合理的方式帮助用户切换显示的月份。
+
+然后是选定月的每日花费日历。显示一个日历，每天标注金额，用渐变色来给一天标色。
+
+然后是每日明细：
+
+日期	消费总额	笔数
+2026-02-27	¥0.00	0
+2026-02-26	¥0.00	0
+
+然后是近20条消费
+日期	消费总额	笔数
+2026-02-27	¥0.00	0
+2026-02-26	¥0.00	0
+
+3.设置用文字描述如下：
+一开始，如果没有用户则进行初始化。要求用户填入食堂账号和原本的食堂密码。就是一个遮罩。
+登录后：
+一个默认头像，旁边显示姓名，并排放IDcode：2024507之类的
+然后放        "GradeName": "2024级",
+        "ClassName": "2408班"
+最后有一个退出功能。
+
+4.每次进入应用时，检测到今日没有刷新，那么就自动刷新一次。
+5.所有数据保存在本地。
+提示：主页中所有的功能均在这个网页中有实现，所以请务必仔细观察网页中的实现形式。
+补充api调用方法：
+用户信息获取：
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=a4dsmi3jh3wvuvje54cwt2dr",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/stuinfo?refreshtime=20260206232313"
+  },
+  "body": "method=getinfo&stuid=1",
+  "method": "POST"
+});
+响应
+{
+    "state": 200,
+    "data": {
+        "SlurMoney": "0.00",
+        "RemitMoney": "0.00",
+        "MultipleMoney": "0.00",
+        "ReceivableMoney": "0.00",
+        "SID": "2024507",
+        "IDcode": "2024507",
+        "StudentID": "28478",
+        "StudentName": "韦知彤",
+        "AcademyName": "南宁市第二中学",
+        "SpecialityName": "凤岭校区学生",
+        "GradeName": "2024级",
+        "ClassName": "2408班",
+        "ExamineeID": "",
+        "ExtendField1": "",
+        "ExtendField2": "",
+        "ExtendField3": "",
+        "PayMoney": "0.00",
+        "LimitCost": "0.00",
+        "Telephone": "",
+        "State": "在校",
+        "StateDate": "",
+        "EntranceDate": "秋季入学",
+        "DeferralMoney": "0.00",
+        "DeferralDate": "",
+        "GreenExpress": "否",
+        "Dorm": "",
+        "UnLimitCost": "0.00",
+        "BankID": "",
+        "email": "",
+        "outDate": "",
+        "valiDataCode": "",
+        "md5_password": "",
+        "newUser": "False",
+        "Type": "高中生",
+        "Remark": ""
+    },
+    "success": true
+}
