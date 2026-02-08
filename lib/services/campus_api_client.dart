@@ -136,18 +136,23 @@ class CampusApiClient {
       return payload;
     } on TimeoutException catch (error, stackTrace) {
       _logError('fetchAll timeout', error, stackTrace);
+      AppLogService.instance.flush();
       throw Exception('校园接口超时，请稍后重试。');
     } on SocketException catch (error, stackTrace) {
       _logError('fetchAll socket error', error, stackTrace);
+      AppLogService.instance.flush();
       throw Exception('网络连接失败，请检查网络后重试。');
     } on HttpException catch (error, stackTrace) {
       _logError('fetchAll http error', error, stackTrace);
+      AppLogService.instance.flush();
       throw Exception('校园接口请求失败，请稍后重试。');
     } on FormatException catch (error, stackTrace) {
       _logError('fetchAll format error', error, stackTrace);
+      AppLogService.instance.flush();
       throw Exception('服务器返回数据格式异常，请稍后重试。');
     } catch (error, stackTrace) {
       _logError('fetchAll unexpected error', error, stackTrace);
+      AppLogService.instance.flush();
       rethrow;
     } finally {
       client.close(force: true);

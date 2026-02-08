@@ -148,7 +148,7 @@ class CanteenRepository {
           onProgress: onProgress,
         )
         .timeout(
-          const Duration(seconds: 12),
+          const Duration(seconds: 30),
           onTimeout: () {
             throw TimeoutException('同步接口超时，请稍后重试。');
           },
