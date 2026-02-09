@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:mobile_app/models/campus_profile.dart';
 import 'package:mobile_app/models/monthly_summary.dart';
+import 'package:mobile_app/models/recharge_record.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/pages/home_page.dart';
 import 'package:mobile_app/pages/settings_page.dart';
@@ -123,6 +124,8 @@ class _AppShellState extends State<AppShell> {
   Timer? _statusClearTimer;
   int _tabIndex = 0;
   final Map<String, List<TransactionRecord>> _transactionsByMonth = {};
+  List<RechargeRecord> _recentRecharges = [];
+  int? _estimatedDays;
   late String _selectedMonth = _currentMonthKey();
 
   @override
@@ -158,6 +161,10 @@ class _AppShellState extends State<AppShell> {
       if (saved.isNotEmpty) {
         _transactionsByMonth.addAll(saved);
       }
+      // Load recent recharges
+      _recentRecharges = await repo.loadRecentRecharges();
+      // Calculate estimated days
+      _estimatedDays = _calcEstimatedDays(repo.balance, saved);
       _logInfo('bootstrap 完成，hasCredential=${repo.hasCredential}');
       // Auto-sync if not synced today
       if (repo.hasCredential) {
@@ -203,17 +210,14 @@ class _AppShellState extends State<AppShell> {
       final fresh = await repo.loadTransactions();
       _transactionsByMonth.addAll(fresh);
       _selectedMonth = _currentMonthKey();
+      // Load recent recharges
+      _recentRecharges = await repo.loadRecentRecharges();
+      // Calculate estimated days
+      _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
       // Update home screen widget
-      final todayKey = _currentDayKey();
-      double todaySpent = 0;
-      for (final txn in (fresh[todayKey.substring(0, 7)] ?? [])) {
-        if (txn.occurredDay == todayKey) {
-          todaySpent += txn.amount.abs();
-        }
-      }
       WidgetService.updateWidget(
         balance: repo.balance ?? 0,
-        todaySpent: todaySpent,
+        estimatedDays: _estimatedDays,
       );
       setState(() {
         _status = '刷新成功';
@@ -312,6 +316,8 @@ class _AppShellState extends State<AppShell> {
         _status = '已登出';
         _tabIndex = 0;
         _transactionsByMonth.clear();
+        _recentRecharges = [];
+        _estimatedDays = null;
       });
       _logInfo('登出完成');
     } catch (error, stackTrace) {
@@ -358,6 +364,8 @@ class _AppShellState extends State<AppShell> {
       final fresh = await repo.loadTransactions();
       _transactionsByMonth.addAll(fresh);
       _profile = repo.profile;
+      _recentRecharges = await repo.loadRecentRecharges();
+      _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
       setState(() => _status = '导入完成，共 $count 条记录');
       _statusClearTimer?.cancel();
       _statusClearTimer = Timer(const Duration(seconds: 3), () {
@@ -368,6 +376,42 @@ class _AppShellState extends State<AppShell> {
       if (!mounted) return;
       setState(() => _status = '导入失败：${_formatError(error)}');
     }
+  }
+
+  Future<String> _reportLoss() async {
+    final repo = _repository;
+    if (repo == null) throw Exception('未初始化');
+    return repo.reportLoss();
+  }
+
+  Future<String> _cancelLoss() async {
+    final repo = _repository;
+    if (repo == null) throw Exception('未初始化');
+    return repo.cancelLoss();
+  }
+
+  static int? _calcEstimatedDays(
+    double? balance,
+    Map<String, List<TransactionRecord>> txnByMonth,
+  ) {
+    if (balance == null || balance <= 0) return null;
+    final now = DateTime.now();
+    final lastMonth = DateTime(now.year, now.month - 1, 1);
+    final lastMonthKey =
+        '${lastMonth.year}-${lastMonth.month.toString().padLeft(2, '0')}';
+    final lastMonthTxns = txnByMonth[lastMonthKey];
+    if (lastMonthTxns == null || lastMonthTxns.isEmpty) return null;
+    final dailyTotals = <String, double>{};
+    for (final txn in lastMonthTxns) {
+      dailyTotals[txn.occurredDay] =
+          (dailyTotals[txn.occurredDay] ?? 0) + txn.amount.abs();
+    }
+    if (dailyTotals.isEmpty) return null;
+    final totalSpent =
+        dailyTotals.values.fold<double>(0, (a, b) => a + b);
+    final avgPerActiveDay = totalSpent / dailyTotals.length;
+    if (avgPerActiveDay <= 0) return null;
+    return (balance / avgPerActiveDay).floor();
   }
 
   String _formatError(Object error) {
@@ -491,6 +535,8 @@ class _AppShellState extends State<AppShell> {
           dailyTotals: dailyTotals,
           dailyCounts: dailyCounts,
           recentTransactions: recentTransactions,
+          recentRecharges: _recentRecharges,
+          estimatedDays: _estimatedDays,
           canGoNext: _selectedMonth.compareTo(_currentMonthKey()) < 0,
           onPrevMonth: () => _switchMonth(-1),
           onNextMonth: () => _switchMonth(1),
@@ -500,6 +546,8 @@ class _AppShellState extends State<AppShell> {
           onLogout: _logout,
           onExport: _exportData,
           onImport: _importData,
+          onReportLoss: _reportLoss,
+          onCancelLoss: _cancelLoss,
           isBusy: _syncing || _settingUp,
         ),
       ],

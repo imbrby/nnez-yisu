@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:mobile_app/models/campus_profile.dart';
+import 'package:mobile_app/models/recharge_record.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/services/app_log_service.dart';
 import 'package:mobile_app/services/campus_api_client.dart';
@@ -120,6 +121,10 @@ class CanteenRepository {
     final stamped = payload.transactions.map((t) => t.withSid(sid)).toList();
     await _db.upsertTransactions(sid, stamped);
 
+    // Save recharges to SQLite with sid
+    final stampedRecharges = payload.recharges.map((r) => r.withSid(sid)).toList();
+    await _db.upsertRecharges(sid, stampedRecharges);
+
     _logInfo('syncNow done');
 
     return stamped;
@@ -214,6 +219,26 @@ class CanteenRepository {
     }
     _logInfo('importFromJson done: ${records.length} transactions');
     return records.length;
+  }
+
+  Future<List<RechargeRecord>> loadRecentRecharges({int limit = 20}) async {
+    final sid = currentSid;
+    if (sid.isEmpty) return [];
+    return _db.queryRecentRecharges(sid: sid, limit: limit);
+  }
+
+  Future<String> reportLoss() async {
+    if (!hasCredential) throw Exception('请先登录账号。');
+    final sid = _storage.campusSid;
+    final password = _storage.campusPassword;
+    return _apiClient.reportLoss(sid: sid, plainPassword: password);
+  }
+
+  Future<String> cancelLoss() async {
+    if (!hasCredential) throw Exception('请先登录账号。');
+    final sid = _storage.campusSid;
+    final password = _storage.campusPassword;
+    return _apiClient.cancelLoss(sid: sid, plainPassword: password);
   }
 
   Future<void> _migrateLegacyTransactions() async {

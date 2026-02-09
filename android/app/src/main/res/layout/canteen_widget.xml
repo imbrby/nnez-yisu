@@ -39,19 +39,19 @@
         android:orientation="vertical">
 
         <TextView
-            android:id="@+id/tv_today_label"
+            android:id="@+id/tv_days_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="今日消费"
+            android:text="可用天数"
             android:textColor="#80000000"
             android:textSize="11sp" />
 
         <TextView
-            android:id="@+id/tv_today_spent"
+            android:id="@+id/tv_estimated_days"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="¥ --"
-            android:textColor="#FFE65100"
+            android:text="-- 天"
+            android:textColor="#FF1F6F5B"
             android:textSize="18sp"
             android:textStyle="bold" />
     </LinearLayout>

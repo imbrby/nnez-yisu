@@ -32,11 +32,11 @@ class CanteenWidgetProvider : AppWidgetProvider() {
         ) {
             val prefs = HomeWidgetPlugin.getData(context)
             val balance = prefs.getString("widget_balance", null) ?: "--"
-            val todaySpent = prefs.getString("widget_today_spent", null) ?: "--"
+            val estimatedDays = prefs.getString("widget_estimated_days", null) ?: "--"
 
             val views = RemoteViews(context.packageName, R.layout.canteen_widget)
             views.setTextViewText(R.id.tv_balance, "¥ $balance")
-            views.setTextViewText(R.id.tv_today_spent, "¥ $todaySpent")
+            views.setTextViewText(R.id.tv_estimated_days, "$estimatedDays 天")
 
             // Click to open app
             val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)

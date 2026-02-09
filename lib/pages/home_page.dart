@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/time_utils.dart';
 import 'package:mobile_app/models/monthly_summary.dart';
+import 'package:mobile_app/models/recharge_record.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/services/canteen_repository.dart';
 
@@ -14,6 +15,8 @@ class HomePage extends StatelessWidget {
     required this.dailyTotals,
     required this.dailyCounts,
     required this.recentTransactions,
+    required this.recentRecharges,
+    required this.estimatedDays,
     required this.canGoNext,
     required this.onPrevMonth,
     required this.onNextMonth,
@@ -26,6 +29,8 @@ class HomePage extends StatelessWidget {
   final Map<String, double> dailyTotals;
   final Map<String, int> dailyCounts;
   final List<TransactionRecord> recentTransactions;
+  final List<RechargeRecord> recentRecharges;
+  final int? estimatedDays;
   final bool canGoNext;
   final VoidCallback onPrevMonth;
   final VoidCallback onNextMonth;
@@ -38,6 +43,29 @@ class HomePage extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final summary = monthlySummary;
+
+    // Merge recent transactions and recharges into activity list
+    final recentActivity = <_ActivityItem>[];
+    for (final txn in recentTransactions) {
+      recentActivity.add(_ActivityItem(
+        occurredAt: txn.occurredAt,
+        occurredDay: txn.occurredDay,
+        title: txn.itemName,
+        amount: txn.amount,
+        isRecharge: false,
+      ));
+    }
+    for (final r in recentRecharges) {
+      recentActivity.add(_ActivityItem(
+        occurredAt: r.occurredAt,
+        occurredDay: r.occurredDay,
+        title: r.channel.isNotEmpty ? r.channel : '充值',
+        amount: r.amount,
+        isRecharge: true,
+      ));
+    }
+    recentActivity.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    final displayActivity = recentActivity.take(20).toList();
 
     return Scaffold(
       body: SafeArea(
@@ -91,19 +119,56 @@ class HomePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      balanceUpdatedAt == null || balanceUpdatedAt.isEmpty
-                          ? '点击刷新按钮同步余额'
-                          : '更新于 ${formatDateTime(balanceUpdatedAt)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
-                      ),
+                    // PLACEHOLDER_ESTIMATED_DAYS_AND_UPDATED
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            balanceUpdatedAt == null || balanceUpdatedAt.isEmpty
+                                ? '点击刷新按钮同步余额'
+                                : '更新于 ${formatDateTime(balanceUpdatedAt)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                        if (estimatedDays != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '预计可用 $estimatedDays 天',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        if (estimatedDays == null && balance != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '预计可用 -- 天',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
+            // PLACEHOLDER_MONTHLY_SUMMARY
             // Monthly Summary Card
             Card(
               elevation: 2,
@@ -115,18 +180,9 @@ class HomePage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.calendar_month_outlined,
-                          color: colorScheme.primary,
-                          size: 20,
-                        ),
+                        Icon(Icons.calendar_month_outlined, color: colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          '消费汇总',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text('消费汇总', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.chevron_left, size: 20),
@@ -135,12 +191,7 @@ class HomePage extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
-                        Text(
-                          monthLabel,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
+                        Text(monthLabel, style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant)),
                         IconButton(
                           icon: const Icon(Icons.chevron_right, size: 20),
                           onPressed: canGoNext ? onNextMonth : null,
@@ -152,46 +203,34 @@ class HomePage extends StatelessWidget {
                     ),
                     if (summary != null) ...[
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _StatItem(label: '总消费', value: '¥${summary.totalSpent.toStringAsFixed(2)}', hint: '当月总消费', icon: Icons.payments_outlined, colorScheme: colorScheme)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _StatItem(label: '总笔数', value: '${summary.transactionCount}', hint: '消费记录数', icon: Icons.receipt_long_outlined, colorScheme: colorScheme)),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: _StatItem(label: '总消费', value: '¥${summary.totalSpent.toStringAsFixed(2)}', hint: '当月总消费', icon: Icons.payments_outlined, colorScheme: colorScheme)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _StatItem(label: '总笔数', value: '${summary.transactionCount}', hint: '消费记录数', icon: Icons.receipt_long_outlined, colorScheme: colorScheme)),
+                      ]),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(child: _StatItem(label: '活跃日均', value: '¥${summary.avgPerActiveDay.toStringAsFixed(2)}', hint: '总额 / 活跃天数', icon: Icons.trending_up_outlined, colorScheme: colorScheme)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _StatItem(label: '活跃天数', value: '${summary.activeDays}', hint: '当日有消费', icon: Icons.event_available_outlined, colorScheme: colorScheme)),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: _StatItem(label: '活跃日均', value: '¥${summary.avgPerActiveDay.toStringAsFixed(2)}', hint: '总额 / 活跃天数', icon: Icons.trending_up_outlined, colorScheme: colorScheme)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _StatItem(label: '活跃天数', value: '${summary.activeDays}', hint: '当日有消费', icon: Icons.event_available_outlined, colorScheme: colorScheme)),
+                      ]),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(child: _StatItem(label: '单笔均消费', value: '¥${summary.avgPerTransaction.toStringAsFixed(2)}', hint: '总额 / 笔数', icon: Icons.analytics_outlined, colorScheme: colorScheme)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _StatItem(label: '单日峰值', value: '¥${summary.maxDailySpent.toStringAsFixed(2)}', hint: '单日最高消费', icon: Icons.arrow_upward_outlined, colorScheme: colorScheme)),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: _StatItem(label: '单笔均消费', value: '¥${summary.avgPerTransaction.toStringAsFixed(2)}', hint: '总额 / 笔数', icon: Icons.analytics_outlined, colorScheme: colorScheme)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _StatItem(label: '单日峰值', value: '¥${summary.maxDailySpent.toStringAsFixed(2)}', hint: '单日最高消费', icon: Icons.arrow_upward_outlined, colorScheme: colorScheme)),
+                      ]),
                     ],
                     if (summary == null) ...[
                       const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          '暂无数据，请刷新',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
+                      Center(child: Text('暂无数据，请刷新', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant))),
                     ],
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
+            // PLACEHOLDER_CALENDAR_AND_ACTIVITY
             // Spending Calendar Card
             Card(
               elevation: 2,
@@ -205,9 +244,9 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ),
-            if (recentTransactions.isNotEmpty) ...[
+            if (displayActivity.isNotEmpty) ...[
               const SizedBox(height: 16),
-              // Recent Transactions Card
+              // Recent Activity Card
               Card(
                 elevation: 2,
                 shadowColor: colorScheme.shadow.withValues(alpha: 0.3),
@@ -220,21 +259,109 @@ class HomePage extends StatelessWidget {
                         children: [
                           Icon(Icons.receipt_long_outlined, color: colorScheme.primary, size: 20),
                           const SizedBox(width: 8),
-                          Text('最近消费', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          Text('最近余额变动', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      ...recentTransactions.map((txn) => _TransactionTile(txn: txn)),
+                      ...displayActivity.map((item) => _ActivityTile(item: item)),
                     ],
                   ),
                 ),
               ),
             ],
           ],
-          ),
         ),
-      );
-    }
+      ),
+    );
+  }
+}
+
+// PLACEHOLDER_HELPER_CLASSES
+
+class _ActivityItem {
+  const _ActivityItem({
+    required this.occurredAt,
+    required this.occurredDay,
+    required this.title,
+    required this.amount,
+    required this.isRecharge,
+  });
+  final String occurredAt;
+  final String occurredDay;
+  final String title;
+  final double amount;
+  final bool isRecharge;
+}
+
+class _ActivityTile extends StatelessWidget {
+  const _ActivityTile({required this.item});
+
+  final _ActivityItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final time = item.occurredAt.length >= 16 ? item.occurredAt.substring(11, 16) : '';
+    final date = item.occurredDay.length >= 10
+        ? '${item.occurredDay.substring(5).replaceFirst('-', '/')} $time'
+        : '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: item.isRecharge
+                  ? colorScheme.tertiaryContainer
+                  : colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              item.isRecharge ? Icons.add_circle_outline : Icons.restaurant_outlined,
+              size: 18,
+              color: item.isRecharge
+                  ? colorScheme.onTertiaryContainer
+                  : colorScheme.onSecondaryContainer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // PLACEHOLDER_TILE_REST
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: theme.textTheme.bodyMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  date,
+                  style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            item.isRecharge
+                ? '+¥${item.amount.toStringAsFixed(2)}'
+                : '-¥${item.amount.toStringAsFixed(2)}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: item.isRecharge
+                  ? const Color(0xFF2E7D32)
+                  : colorScheme.error,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatItem extends StatelessWidget {
@@ -255,6 +382,7 @@ class _StatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // PLACEHOLDER_STAT_ITEM_BODY
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -302,61 +430,7 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.txn});
-
-  final TransactionRecord txn;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final time = txn.occurredAt.length >= 16 ? txn.occurredAt.substring(11, 16) : '';
-    final date = txn.occurredDay.length >= 10 ? '${txn.occurredDay.substring(5).replaceFirst('-', '/')} $time' : '';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.restaurant_outlined, size: 18, color: colorScheme.onSecondaryContainer),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  txn.itemName,
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  date,
-                  style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '-¥${txn.amount.toStringAsFixed(2)}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: colorScheme.error,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// PLACEHOLDER_SPENDING_CALENDAR
 
 class _SpendingCalendar extends StatelessWidget {
   const _SpendingCalendar({
@@ -369,7 +443,6 @@ class _SpendingCalendar extends StatelessWidget {
   final Map<String, double> dailyTotals;
   final Map<String, int> dailyCounts;
 
-  // Warm color palette
   static const _warmLight = Color(0xFFFFF3E0);
   static const _warmDark = Color(0xFFE65100);
 
@@ -383,7 +456,7 @@ class _SpendingCalendar extends StatelessWidget {
     final month = int.parse(parts[1]);
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-    final startWeekday = firstDay.weekday % 7; // 0=Sun
+    final startWeekday = firstDay.weekday % 7;
 
     final maxSpend = dailyTotals.values.isEmpty
         ? 1.0
@@ -410,6 +483,7 @@ class _SpendingCalendar extends StatelessWidget {
           )).toList(),
         ),
         const SizedBox(height: 4),
+        // PLACEHOLDER_CALENDAR_ROWS
         ..._buildRows(context, daysInMonth, startWeekday, year, month, maxSpend, theme, colorScheme),
       ],
     );
@@ -488,22 +562,18 @@ class _SpendingCalendar extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Column(
-                  children: [
-                    Icon(Icons.payments_outlined, color: colorScheme.primary),
-                    const SizedBox(height: 4),
-                    Text('¥${spent.toStringAsFixed(2)}', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                    Text('总消费', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
-                  ],
-                ),
-                Column(
-                  children: [
-                    Icon(Icons.receipt_long_outlined, color: colorScheme.primary),
-                    const SizedBox(height: 4),
-                    Text('$count', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                    Text('交易笔数', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
-                  ],
-                ),
+                Column(children: [
+                  Icon(Icons.payments_outlined, color: colorScheme.primary),
+                  const SizedBox(height: 4),
+                  Text('¥${spent.toStringAsFixed(2)}', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('总消费', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                ]),
+                Column(children: [
+                  Icon(Icons.receipt_long_outlined, color: colorScheme.primary),
+                  const SizedBox(height: 4),
+                  Text('$count', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('交易笔数', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                ]),
               ],
             ),
             const SizedBox(height: 16),
@@ -513,4 +583,3 @@ class _SpendingCalendar extends StatelessWidget {
     );
   }
 }
-

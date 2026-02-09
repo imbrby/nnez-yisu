@@ -5,7 +5,22 @@
       "Bash(flutter analyze:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(keytool:*)",
+      "Bash(flutter build:*)",
+      "Bash(cmd /c:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(set HTTP_PROXY=http://127.0.0.1:7890)",
+      "Bash(set HTTPS_PROXY=http://127.0.0.1:7890)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pub.dev)",
+      "Bash(gh issue view:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)",
+      "Bash(where /r \"%LOCALAPPDATA%\\\\Pub\\\\Cache\\\\hosted\\\\pub.dev\\\\workmanager-0.9.0+3\" \"workmanager.dart\")"
     ]
   }
 }

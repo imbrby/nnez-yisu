@@ -2,6 +2,7 @@
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:mobile_app/services/app_log_service.dart';
+import 'package:mobile_app/models/recharge_record.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -27,28 +28,15 @@ class LocalDatabaseService {
     _logInfo('init start path=$dbPath');
     _db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
-        await db.execute(
-          'CREATE TABLE transactions ('
-          'sid TEXT NOT NULL,'
-          'txn_id TEXT NOT NULL,'
-          'amount REAL NOT NULL,'
-          'balance REAL,'
-          'occurred_at TEXT NOT NULL,'
-          'occurred_day TEXT NOT NULL,'
-          'item_name TEXT NOT NULL,'
-          'raw_payload TEXT NOT NULL,'
-          'updated_at TEXT NOT NULL,'
-          'PRIMARY KEY (sid, txn_id)'
-          ')',
-        );
-        await db.execute(
-          'CREATE INDEX idx_transactions_sid_day ON transactions (sid, occurred_day)',
-        );
-        await db.execute(
-          'CREATE INDEX idx_transactions_sid_time ON transactions (sid, occurred_at DESC)',
-        );
+        await _createTransactionsTable(db);
+        await _createRechargesTable(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createRechargesTable(db);
+        }
       },
     );
     _logInfo('init done');
@@ -158,8 +146,98 @@ class LocalDatabaseService {
     return rows.map(TransactionRecord.fromDbMap).toList();
   }
 
-  Future<void> clearAll() {
-    return db.delete('transactions');
+  Future<void> clearAll() async {
+    await db.delete('transactions');
+    await db.delete('recharges');
+  }
+
+  Future<void> upsertRecharges(
+    String sid,
+    List<RechargeRecord> rows, {
+    void Function(String message)? onProgress,
+  }) async {
+    if (rows.isEmpty) {
+      _logInfo('upsertRecharges skipped: rows=0 sid=$sid');
+      return;
+    }
+    _logInfo('upsertRecharges start sid=$sid rows=${rows.length}');
+    const chunkSize = 250;
+    var processed = 0;
+    while (processed < rows.length) {
+      final end = (processed + chunkSize > rows.length)
+          ? rows.length
+          : processed + chunkSize;
+      final batch = db.batch();
+      for (var i = processed; i < end; i += 1) {
+        batch.insert(
+          'recharges',
+          rows[i].toDbMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+      processed = end;
+    }
+    _logInfo('upsertRecharges done sid=$sid rows=${rows.length}');
+  }
+
+  Future<List<RechargeRecord>> queryRecentRecharges({
+    required String sid,
+    int limit = 20,
+  }) async {
+    _logInfo('queryRecentRecharges start sid=$sid limit=$limit');
+    final rows = await db.query(
+      'recharges',
+      where: 'sid = ?',
+      whereArgs: <Object?>[sid],
+      orderBy: 'occurred_at DESC, order_id DESC',
+      limit: limit,
+    );
+    _logInfo('queryRecentRecharges done sid=$sid rows=${rows.length}');
+    return rows.map(RechargeRecord.fromDbMap).toList();
+  }
+
+  static Future<void> _createTransactionsTable(Database db) async {
+    await db.execute(
+      'CREATE TABLE transactions ('
+      'sid TEXT NOT NULL,'
+      'txn_id TEXT NOT NULL,'
+      'amount REAL NOT NULL,'
+      'balance REAL,'
+      'occurred_at TEXT NOT NULL,'
+      'occurred_day TEXT NOT NULL,'
+      'item_name TEXT NOT NULL,'
+      'raw_payload TEXT NOT NULL,'
+      'updated_at TEXT NOT NULL,'
+      'PRIMARY KEY (sid, txn_id)'
+      ')',
+    );
+    await db.execute(
+      'CREATE INDEX idx_transactions_sid_day ON transactions (sid, occurred_day)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_transactions_sid_time ON transactions (sid, occurred_at DESC)',
+    );
+  }
+
+  static Future<void> _createRechargesTable(Database db) async {
+    await db.execute(
+      'CREATE TABLE recharges ('
+      'sid TEXT NOT NULL,'
+      'order_id TEXT NOT NULL,'
+      'amount REAL NOT NULL,'
+      'occurred_at TEXT NOT NULL,'
+      'occurred_day TEXT NOT NULL,'
+      'status TEXT NOT NULL,'
+      'channel TEXT NOT NULL,'
+      'raw_payload TEXT NOT NULL,'
+      'updated_at TEXT NOT NULL,'
+      'PRIMARY KEY (sid, order_id)'
+      ')',
+    );
+    await db.execute(
+      'CREATE INDEX idx_recharges_sid_time ON recharges (sid, occurred_at DESC)',
+    );
   }
 
   Future<void> close() async {

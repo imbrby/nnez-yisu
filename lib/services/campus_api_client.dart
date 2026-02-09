@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:mobile_app/models/campus_profile.dart';
 import 'package:mobile_app/models/campus_sync_payload.dart';
+import 'package:mobile_app/models/recharge_record.dart';
 import 'package:mobile_app/models/transaction_record.dart';
 import 'package:mobile_app/services/app_log_service.dart';
 
@@ -143,6 +144,36 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
       'profile fetched sid=${profile.sid} name=${profile.studentName}',
     );
 
+    // Fetch recharges
+    List<Map<String, dynamic>> rechargeRaw = <Map<String, dynamic>>[];
+    if (params.includeTransactions) {
+      final rechargeResp = await _postForm(
+        client: client,
+        session: session,
+        path: '/interface/index',
+        payload: <String, String>{
+          'method': 'getorderlistbytime',
+          'stuid': '1',
+          'startdate': params.startDate,
+          'enddate': params.endDate,
+        },
+        refererPath: '/mobile/jyjl',
+        logInfo: logInfo,
+      );
+      final rechargeJson = _decodeJson(rechargeResp.body);
+      if (rechargeResp.statusCode == 200 && _isSuccess(rechargeJson)) {
+        final parsed = rechargeJson['data'];
+        if (parsed is List) {
+          for (final item in parsed) {
+            if (item is Map<String, dynamic>) {
+              rechargeRaw.add(item);
+            }
+          }
+        }
+      }
+      logInfo('recharges fetched rows=${rechargeRaw.length}');
+    }
+
     // Parse transactions
     final records = <TransactionRecord>[];
     for (final item in transactions) {
@@ -154,9 +185,21 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
     }
     logInfo('parsed ${records.length} valid transactions');
 
+    // Parse recharges
+    final rechargeRecords = <RechargeRecord>[];
+    for (final item in rechargeRaw) {
+      try {
+        rechargeRecords.add(RechargeRecord.fromRemote(item));
+      } catch (e) {
+        logInfo('skip invalid recharge: $e');
+      }
+    }
+    logInfo('parsed ${rechargeRecords.length} valid recharges');
+
     final payload = CampusSyncPayload(
       profile: profile,
       transactions: records,
+      recharges: rechargeRecords,
       balance: balance,
       balanceUpdatedAt: DateTime.now(),
     );
@@ -392,6 +435,116 @@ String _extractMessage(Map<String, dynamic> payload) {
 }
 
 // ---------------------------------------------------------------------------
+// Card loss/unlock isolate entry points
+// ---------------------------------------------------------------------------
+
+typedef _CardOpParams = ({
+  String sid,
+  String plainPassword,
+  String method,
+});
+
+class _CardOpResult {
+  const _CardOpResult({required this.message, required this.logs});
+  final String message;
+  final List<String> logs;
+}
+
+Future<_CardOpResult> _cardOpInIsolate(_CardOpParams params) async {
+  final logs = <String>[];
+  void logInfo(String msg) => logs.add('[INFO][API] $msg');
+  void logError(String ctx, Object err, StackTrace st) {
+    logs.add('[ERROR][API] $ctx\nerror: $err\nstack:\n$st');
+  }
+
+  logInfo('cardOp start method=${params.method} sid=${params.sid}');
+
+  final client = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 10)
+    ..idleTimeout = const Duration(seconds: 3);
+  final session = _CampusSession();
+
+  try {
+    await _bootstrapSession(client, session, logInfo);
+    logInfo('session bootstrap ok');
+
+    final authTypeResp = await _postForm(
+      client: client,
+      session: session,
+      path: '/interface/index',
+      payload: <String, String>{'method': 'loginauthtype'},
+      refererPath: '/mobile/login',
+      logInfo: logInfo,
+    );
+    logInfo('POST loginauthtype done status=${authTypeResp.statusCode}');
+
+    final verifyResp = await _getRequest(
+      client: client,
+      session: session,
+      path: '/interface/getVerifyCode?${Random().nextDouble()}',
+      refererPath: '/mobile/login',
+      accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      readText: false,
+      logInfo: logInfo,
+    );
+    if (verifyResp.statusCode != 200) {
+      throw Exception('验证码会话初始化失败 (${verifyResp.statusCode})');
+    }
+
+    final loginResp = await _postForm(
+      client: client,
+      session: session,
+      path: '/interface/login',
+      payload: <String, String>{
+        'sid': params.sid,
+        'passWord': base64Encode(utf8.encode(params.plainPassword)),
+        'verifycode': '',
+        'ismobile': '1',
+      },
+      refererPath: '/mobile/login',
+      logInfo: logInfo,
+    );
+    final loginJson = _decodeJson(loginResp.body);
+    if (loginResp.statusCode != 200 || !_isSuccess(loginJson)) {
+      throw Exception('登录失败：${_extractMessage(loginJson)}');
+    }
+    logInfo('login success');
+
+    final opResp = await _postForm(
+      client: client,
+      session: session,
+      path: '/interface/index',
+      payload: <String, String>{
+        'method': params.method,
+        'stuid': '0',
+        'carno': params.sid,
+      },
+      refererPath: '/mobile/yktgsjg',
+      logInfo: logInfo,
+    );
+    final opJson = _decodeJson(opResp.body);
+    logInfo('cardOp response status=${opResp.statusCode}');
+    if (opResp.statusCode != 200 || !_isSuccess(opJson)) {
+      throw Exception(_extractMessage(opJson));
+    }
+    final msg = _extractMessage(opJson);
+    logInfo('cardOp success: $msg');
+    return _CardOpResult(message: msg, logs: logs);
+  } on TimeoutException catch (err, st) {
+    logError('cardOp timeout', err, st);
+    throw Exception('操作超时，请稍后重试。');
+  } on SocketException catch (err, st) {
+    logError('cardOp socket error', err, st);
+    throw Exception('网络连接失败，请检查网络后重试。');
+  } catch (err, st) {
+    logError('cardOp error', err, st);
+    rethrow;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API — thin wrapper that dispatches to isolate
 // ---------------------------------------------------------------------------
 
@@ -426,6 +579,52 @@ class CampusApiClient {
       return result.payload;
     } catch (error, stackTrace) {
       _logError('fetchAll isolate failed', error, stackTrace);
+      AppLogService.instance.flush();
+      rethrow;
+    }
+  }
+
+  Future<String> reportLoss({
+    required String sid,
+    required String plainPassword,
+  }) async {
+    _logInfo('reportLoss dispatching to isolate sid=$sid');
+    final params = (
+      sid: sid,
+      plainPassword: plainPassword,
+      method: 'ecardguashi',
+    );
+    try {
+      final result = await Isolate.run(() => _cardOpInIsolate(params));
+      for (final line in result.logs) {
+        _logInfo(line);
+      }
+      return result.message;
+    } catch (error, stackTrace) {
+      _logError('reportLoss isolate failed', error, stackTrace);
+      AppLogService.instance.flush();
+      rethrow;
+    }
+  }
+
+  Future<String> cancelLoss({
+    required String sid,
+    required String plainPassword,
+  }) async {
+    _logInfo('cancelLoss dispatching to isolate sid=$sid');
+    final params = (
+      sid: sid,
+      plainPassword: plainPassword,
+      method: 'ecardjiegua',
+    );
+    try {
+      final result = await Isolate.run(() => _cardOpInIsolate(params));
+      for (final line in result.logs) {
+        _logInfo(line);
+      }
+      return result.message;
+    } catch (error, stackTrace) {
+      _logError('cancelLoss isolate failed', error, stackTrace);
       AppLogService.instance.flush();
       rethrow;
     }
