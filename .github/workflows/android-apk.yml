@@ -1,4 +1,4 @@
-name: Android APK
+name: Multi Platform Release
 
 on:
   workflow_dispatch:
@@ -7,10 +7,13 @@ on:
       - main
 
 jobs:
-  build-apk:
+  build-android:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -81,26 +84,91 @@ jobs:
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/yisu-${{ steps.version.outputs.tag }}-arm64.apk
 
-      - name: Upload APK artifact
+      - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
+          name: android-apk
           path: build/app/outputs/flutter-apk/yisu-*.apk
+
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows (release)
+        run: flutter build windows --release
+
+      - name: Package Windows app
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          $src = "build/windows/x64/runner/Release"
+          $dest = "build/windows/x64/runner/yisu-windows-v$version"
+          $zip = "build/windows/x64/runner/yisu-windows-v$version.zip"
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+          if (Test-Path $zip) { Remove-Item -Force $zip }
+          Copy-Item -Recurse -Force $src $dest
+          if (!(Test-Path "$dest/yisu.exe")) { throw "yisu.exe not found in bundle" }
+          Compress-Archive -Path $dest -DestinationPath $zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: build/windows/x64/runner/yisu-windows-*.zip
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build-android, build-windows]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: dist/android
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/windows
 
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_NAME: 一粟 ${{ steps.version.outputs.tag }}
-          APK_PATH: build/app/outputs/flutter-apk/yisu-${{ steps.version.outputs.tag }}-arm64.apk
+          REPO: imbrby/nnez-yisu
+          TAG: ${{ needs.build-android.outputs.tag }}
+          RELEASE_NAME: 一粟 ${{ needs.build-android.outputs.tag }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
+          APK_PATH=$(ls dist/android/yisu-*.apk | head -n1)
+          WINDOWS_ZIP_PATH=$(ls dist/windows/yisu-windows-*.zip | head -n1)
+          if [ -z "$APK_PATH" ] || [ -z "$WINDOWS_ZIP_PATH" ]; then
+            echo "Missing release assets"
+            exit 1
+          fi
+
           if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
-            gh release upload "$TAG" "$APK_PATH" --repo "$REPO" --clobber
+            gh release upload "$TAG" "$APK_PATH" "$WINDOWS_ZIP_PATH" --repo "$REPO" --clobber
             gh release edit "$TAG" --repo "$REPO" --title "$RELEASE_NAME"
           else
-            gh release create "$TAG" "$APK_PATH" \
+            gh release create "$TAG" "$APK_PATH" "$WINDOWS_ZIP_PATH" \
               --repo "$REPO" \
               --title "$RELEASE_NAME" \
               --target "$COMMIT_SHA" \

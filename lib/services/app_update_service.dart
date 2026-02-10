@@ -19,16 +19,18 @@ class AppReleaseInfo {
   const AppReleaseInfo({
     required this.tagName,
     required this.releasePageUrl,
-    required this.apkUrl,
-    required this.mirrorApkUrl,
+    required this.downloadUrl,
+    required this.mirrorDownloadUrl,
     required this.fileName,
+    required this.packagePlatform,
   });
 
   final String tagName;
   final String releasePageUrl;
-  final String? apkUrl;
-  final String? mirrorApkUrl;
+  final String? downloadUrl;
+  final String? mirrorDownloadUrl;
   final String fileName;
+  final String packagePlatform;
 }
 
 class UpdateCheckResult {
@@ -182,34 +184,28 @@ class AppUpdateService {
       final assets = (data['assets'] is List)
           ? (data['assets'] as List)
           : const <dynamic>[];
-      String? apkUrl;
-      String fileName = 'update.apk';
-      for (final item in assets) {
-        if (item is! Map) continue;
-        final name = (item['name'] ?? '').toString();
-        if (!name.toLowerCase().endsWith('.apk')) continue;
-        final downloadUrl = (item['browser_download_url'] ?? '').toString();
-        if (downloadUrl.isEmpty) continue;
-        apkUrl = downloadUrl;
-        fileName = name;
-        break;
-      }
-      final mirrorApkUrl = apkUrl == null
+      final selectedAsset = _selectAssetForCurrentPlatform(assets);
+      final downloadUrl = selectedAsset?.downloadUrl;
+      final fileName = selectedAsset?.fileName ?? '';
+      final mirrorDownloadUrl = downloadUrl == null
           ? null
-          : 'https://gh-proxy.org/$apkUrl';
+          : 'https://gh-proxy.org/$downloadUrl';
 
       final release = AppReleaseInfo(
         tagName: tagName,
         releasePageUrl: htmlUrl,
-        apkUrl: apkUrl,
-        mirrorApkUrl: mirrorApkUrl,
+        downloadUrl: downloadUrl,
+        mirrorDownloadUrl: mirrorDownloadUrl,
         fileName: fileName,
+        packagePlatform: selectedAsset?.platformLabel ?? _platformLabel(),
       );
       return UpdateCheckResult(
         hasUpdate: true,
         currentVersionLabel: currentVersionLabel,
         latestVersionLabel: latestVersionLabel,
-        message: '发现新版本: $latestVersionLabel',
+        message: selectedAsset == null
+            ? '发现新版本: $latestVersionLabel（当前平台无安装包）'
+            : '发现新版本: $latestVersionLabel',
         release: release,
       );
     } catch (error, stackTrace) {
@@ -249,6 +245,12 @@ class AppUpdateService {
               '最新版本: ${result.latestVersionLabel}\n'
               '当前版本: ${result.currentVersionLabel}',
             ),
+            if (release.downloadUrl == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '当前设备（${release.packagePlatform}）暂无独立安装包，将跳转发布页下载。',
+              ),
+            ],
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: () async {
@@ -305,23 +307,21 @@ class AppUpdateService {
       messenger?.showSnackBar(SnackBar(content: Text(text)));
     }
 
-    if (!Platform.isAndroid) {
-      await _openReleasePage(release, channel);
-      return;
-    }
-
     final sourceUrl = channel == UpdateDownloadChannel.mirror
-        ? release.mirrorApkUrl
-        : release.apkUrl;
+        ? release.mirrorDownloadUrl
+        : release.downloadUrl;
 
     if (sourceUrl == null || sourceUrl.isEmpty) {
-      showMessage('未找到 APK 文件，已打开发布页');
+      showMessage('当前平台未找到安装包，已打开发布页');
       await _openReleasePage(release, channel);
       return;
     }
 
-    final targetDir = await getTemporaryDirectory();
-    final filePath = '${targetDir.path}/${release.fileName}';
+    final targetDir = await _resolveDownloadDirectory();
+    final fileName = release.fileName.isEmpty
+        ? _defaultFileNameForCurrentPlatform()
+        : release.fileName;
+    final filePath = '${targetDir.path}/$fileName';
     final file = File(filePath);
 
     showMessage('正在下载更新包...');
@@ -339,16 +339,26 @@ class AppUpdateService {
       await response.forEach(sink.add);
       await sink.close();
 
-      final openResult = await OpenFilex.open(
-        filePath,
-        type: 'application/vnd.android.package-archive',
-      );
-      if (openResult.type != ResultType.done) {
-        throw Exception('无法打开安装器: ${openResult.message}');
+      if (Platform.isAndroid) {
+        final openResult = await OpenFilex.open(
+          filePath,
+          type: 'application/vnd.android.package-archive',
+        );
+        if (openResult.type != ResultType.done) {
+          throw Exception('无法打开安装器: ${openResult.message}');
+        }
+        await _addPendingPackagePath(filePath);
+        unawaited(_deletePackageWhenPossible(filePath));
+        showMessage('已下载完成，正在打开安装器');
+        return;
       }
-      await _addPendingPackagePath(filePath);
-      unawaited(_deletePackageWhenPossible(filePath));
-      showMessage('已下载完成，正在打开安装器');
+
+      final openResult = await OpenFilex.open(filePath);
+      if (openResult.type == ResultType.done) {
+        showMessage('已下载完成');
+      } else {
+        showMessage('已下载到：$filePath');
+      }
     } catch (error, stackTrace) {
       AppLogService.instance.error(
         'downloadAndInstall failed',
@@ -372,6 +382,84 @@ class AppUpdateService {
     final uri = Uri.tryParse(targetUrl);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<Directory> _resolveDownloadDirectory() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return getTemporaryDirectory();
+    }
+    final downloads = await getDownloadsDirectory();
+    if (downloads != null) return downloads;
+    return getApplicationSupportDirectory();
+  }
+
+  static String _defaultFileNameForCurrentPlatform() {
+    if (Platform.isAndroid) return 'update.apk';
+    if (Platform.isWindows) return 'yisu-windows.zip';
+    if (Platform.isMacOS) return 'yisu-macos.zip';
+    if (Platform.isLinux) return 'yisu-linux.zip';
+    return 'update.bin';
+  }
+
+  static _ReleaseAsset? _selectAssetForCurrentPlatform(List<dynamic> assets) {
+    if (Platform.isAndroid) {
+      return _pickAssetByExtensions(assets, const <String>['.apk'], 'Android');
+    }
+    if (Platform.isWindows) {
+      return _pickAssetByExtensions(
+        assets,
+        const <String>['.zip', '.exe', '.msix'],
+        'Windows',
+      );
+    }
+    if (Platform.isMacOS) {
+      return _pickAssetByExtensions(
+        assets,
+        const <String>['.dmg', '.pkg', '.zip'],
+        'macOS',
+      );
+    }
+    if (Platform.isLinux) {
+      return _pickAssetByExtensions(
+        assets,
+        const <String>['.AppImage', '.deb', '.rpm', '.tar.gz', '.zip'],
+        'Linux',
+      );
+    }
+    return null;
+  }
+
+  static _ReleaseAsset? _pickAssetByExtensions(
+    List<dynamic> assets,
+    List<String> extensions,
+    String platformLabel,
+  ) {
+    for (final item in assets) {
+      if (item is! Map) continue;
+      final name = (item['name'] ?? '').toString();
+      final lowerName = name.toLowerCase();
+      final matched = extensions.any(
+        (extension) => lowerName.endsWith(extension.toLowerCase()),
+      );
+      if (!matched) continue;
+      final url = (item['browser_download_url'] ?? '').toString();
+      if (url.isEmpty) continue;
+      return _ReleaseAsset(
+        fileName: name,
+        downloadUrl: url,
+        platformLabel: platformLabel,
+      );
+    }
+    return null;
+  }
+
+  static String _platformLabel() {
+    if (Platform.isAndroid) return 'Android';
+    if (Platform.isWindows) return 'Windows';
+    if (Platform.isMacOS) return 'macOS';
+    if (Platform.isLinux) return 'Linux';
+    if (Platform.isIOS) return 'iOS';
+    return '当前平台';
   }
 
   static String _versionLabel(String version, String buildNumber) {
@@ -436,6 +524,18 @@ class AppUpdateService {
       return false;
     }
   }
+}
+
+class _ReleaseAsset {
+  const _ReleaseAsset({
+    required this.fileName,
+    required this.downloadUrl,
+    required this.platformLabel,
+  });
+
+  final String fileName;
+  final String downloadUrl;
+  final String platformLabel;
 }
 
 class _ParsedVersion implements Comparable<_ParsedVersion> {
