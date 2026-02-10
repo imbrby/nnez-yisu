@@ -646,21 +646,41 @@ class _AppShellState extends State<AppShell> {
                       _tabIndex = index;
                     });
                   },
+                  groupAlignment: 0,
+                  minWidth: 96,
                   labelType: NavigationRailLabelType.all,
                   destinations: const <NavigationRailDestination>[
                     NavigationRailDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home),
+                      icon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.home_outlined),
+                      ),
+                      selectedIcon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.home),
+                      ),
                       label: Text('首页'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      selectedIcon: Icon(Icons.receipt_long),
+                      icon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.receipt_long_outlined),
+                      ),
+                      selectedIcon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.receipt_long),
+                      ),
                       label: Text('细目'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
+                      icon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.settings_outlined),
+                      ),
+                      selectedIcon: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Icon(Icons.settings),
+                      ),
                       label: Text('设置'),
                     ),
                   ],
