@@ -6,32 +6,27 @@
     android:background="@drawable/widget_background"
     android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="8dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/tv_balance_label"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:text="校园卡余额"
+        android:textColor="#99252A24"
+        android:textSize="11sp" />
 
-        <TextView
-            android:id="@+id/tv_balance_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="校园卡余额"
-            android:textColor="#99252A24"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/tv_balance"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="end"
-            android:text="¥ --"
-            android:textColor="#FF1F6F5B"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+    <TextView
+        android:id="@+id/tv_balance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="¥ --"
+        android:textColor="#FF1F6F5B"
+        android:textSize="24sp"
+        android:textStyle="bold" />
 
 </LinearLayout>

@@ -17,6 +17,7 @@ class ExpenseClassifier {
       <String, ExpenseCategory>{
         '学生食堂': ExpenseCategory.meal,
         '凉茶店': ExpenseCategory.drink,
+        '凤岭小卖部': ExpenseCategory.snack,
         '凤岭小卖铺': ExpenseCategory.snack,
       };
 
