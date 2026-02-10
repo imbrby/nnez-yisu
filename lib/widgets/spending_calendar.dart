@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/models/home_summary.dart';
+import 'package:nnez_yisu/models/home_summary.dart';
 
 class SpendingCalendar extends StatelessWidget {
   const SpendingCalendar({super.key, required this.daily});

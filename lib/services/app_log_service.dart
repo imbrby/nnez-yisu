@@ -29,7 +29,11 @@ class AppLogService {
     _logFile = File(path.join(logsDir.path, 'app.log'));
     _initialized = true;
     await _rotateIfNeeded();
-    await _appendAndFlush('===== New Session =====', level: 'INFO', tag: 'BOOT');
+    await _appendAndFlush(
+      '===== New Session =====',
+      level: 'INFO',
+      tag: 'BOOT',
+    );
   }
 
   void info(String message, {String tag = 'APP'}) {

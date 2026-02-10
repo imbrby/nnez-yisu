@@ -1,6 +1,6 @@
 import 'package:home_widget/home_widget.dart';
-import 'package:mobile_app/services/app_log_service.dart';
-import 'package:mobile_app/services/campus_api_client.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const backgroundSyncTaskName = 'com.brby.yisu.backgroundSync';

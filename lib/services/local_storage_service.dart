@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/models/transaction_record.dart';
-import 'package:mobile_app/services/app_log_service.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalStorageService {
@@ -25,7 +25,8 @@ class LocalStorageService {
   // Per-user key helpers
   static String _userProfileKey(String sid) => 'user_${sid}_profile';
   static String _userBalanceKey(String sid) => 'user_${sid}_balance';
-  static String _userBalanceUpdatedAtKey(String sid) => 'user_${sid}_balance_updated_at';
+  static String _userBalanceUpdatedAtKey(String sid) =>
+      'user_${sid}_balance_updated_at';
 
   static Future<LocalStorageService> create() async {
     final watch = Stopwatch()..start();
@@ -80,8 +81,12 @@ class LocalStorageService {
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return CampusProfile.fromJson(decoded);
-      if (decoded is Map) return CampusProfile.fromJson(Map<String, dynamic>.from(decoded));
+      if (decoded is Map<String, dynamic>) {
+        return CampusProfile.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return CampusProfile.fromJson(Map<String, dynamic>.from(decoded));
+      }
     } catch (error) {
       _logInfo('profile parse failed: $error');
     }
@@ -104,13 +109,15 @@ class LocalStorageService {
     });
   }
 
-  double? getBalance({String? sid}) => _prefs.getDouble(_userBalanceKey(sid ?? campusSid));
+  double? getBalance({String? sid}) =>
+      _prefs.getDouble(_userBalanceKey(sid ?? campusSid));
   double? get balance => getBalance();
 
   String? getBalanceUpdatedAt({String? sid}) {
     final value = _prefs.getString(_userBalanceUpdatedAtKey(sid ?? campusSid));
     return (value == null || value.isEmpty) ? null : value;
   }
+
   String? get balanceUpdatedAt => getBalanceUpdatedAt();
 
   // --- Logout (preserve per-user data) ---
@@ -141,7 +148,8 @@ class LocalStorageService {
       await _prefs.setDouble(_userBalanceKey(sid), oldBalance);
     }
     final oldUpdatedAt = _prefs.getString(_legacyBalanceUpdatedAtKey);
-    if (oldUpdatedAt != null && !_prefs.containsKey(_userBalanceUpdatedAtKey(sid))) {
+    if (oldUpdatedAt != null &&
+        !_prefs.containsKey(_userBalanceUpdatedAtKey(sid))) {
       await _prefs.setString(_userBalanceUpdatedAtKey(sid), oldUpdatedAt);
     }
     await _prefs.setString(_activeSidKey, sid);
@@ -160,7 +168,9 @@ class LocalStorageService {
       final result = <String, List<TransactionRecord>>{};
       for (final entry in decoded.entries) {
         final list = (entry.value as List)
-            .map((e) => TransactionRecord.fromJsonMap(e as Map<String, dynamic>))
+            .map(
+              (e) => TransactionRecord.fromJsonMap(e as Map<String, dynamic>),
+            )
             .toList();
         result[entry.key] = list;
       }

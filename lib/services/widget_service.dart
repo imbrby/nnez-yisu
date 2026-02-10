@@ -1,5 +1,5 @@
 import 'package:home_widget/home_widget.dart';
-import 'package:mobile_app/services/app_log_service.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
 
 class WidgetService {
   static const _androidWidgetName = 'CanteenWidgetProvider';

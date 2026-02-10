@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
-import 'package:mobile_app/services/app_log_service.dart';
-import 'package:mobile_app/services/campus_api_client.dart';
-import 'package:mobile_app/services/local_database_service.dart';
-import 'package:mobile_app/services/local_storage_service.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/campus_api_client.dart';
+import 'package:nnez_yisu/services/local_database_service.dart';
+import 'package:nnez_yisu/services/local_storage_service.dart';
 
 class CanteenRepository {
   CanteenRepository._(this._storage, this._db, this._apiClient);

@@ -28,25 +28,35 @@ class DataManagementPage extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: Icon(Icons.upload_outlined, color: colorScheme.primary),
+                  leading: Icon(
+                    Icons.upload_outlined,
+                    color: colorScheme.primary,
+                  ),
                   title: const Text('导出数据'),
                   subtitle: const Text('将消费记录导出为 JSON 文件'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: isBusy ? null : () {
-                    onExport();
-                    Navigator.pop(context);
-                  },
+                  onTap: isBusy
+                      ? null
+                      : () {
+                          onExport();
+                          Navigator.pop(context);
+                        },
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
-                  leading: Icon(Icons.download_outlined, color: colorScheme.primary),
+                  leading: Icon(
+                    Icons.download_outlined,
+                    color: colorScheme.primary,
+                  ),
                   title: const Text('导入数据'),
                   subtitle: const Text('从 JSON 文件导入消费记录'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: isBusy ? null : () {
-                    onImport();
-                    Navigator.pop(context);
-                  },
+                  onTap: isBusy
+                      ? null
+                      : () {
+                          onImport();
+                          Navigator.pop(context);
+                        },
                 ),
               ],
             ),

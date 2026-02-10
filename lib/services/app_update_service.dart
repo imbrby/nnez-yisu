@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:mobile_app/services/app_log_service.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const _repoOwner = 'imbrby';
-const _repoName = 'nnez-canteen-mobile';
+const _repoName = 'nnez-yisu';
 
 enum UpdateDownloadChannel { mirror, github }
 
@@ -107,7 +107,7 @@ class AppUpdateService {
     try {
       final request = await client.getUrl(Uri.parse(_apiLatestRelease));
       request.headers.set('Accept', 'application/vnd.github.v3+json');
-      request.headers.set('User-Agent', 'nnez-canteen-mobile');
+      request.headers.set('User-Agent', 'nnez-yisu');
       final response = await request.close().timeout(
         const Duration(seconds: 12),
       );
@@ -328,7 +328,7 @@ class AppUpdateService {
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(sourceUrl));
-      request.headers.set('User-Agent', 'nnez-canteen-mobile');
+      request.headers.set('User-Agent', 'nnez-yisu');
       final response = await request.close().timeout(
         const Duration(minutes: 3),
       );

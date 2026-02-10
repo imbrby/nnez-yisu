@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/pages/about_page.dart';
-import 'package:mobile_app/pages/account_operation_page.dart';
-import 'package:mobile_app/pages/data_management_page.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/pages/about_page.dart';
+import 'package:nnez_yisu/pages/account_operation_page.dart';
+import 'package:nnez_yisu/pages/data_management_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -61,16 +61,30 @@ class SettingsPage extends StatelessWidget {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: colorScheme.primaryContainer,
-                        child: Icon(Icons.person, size: 30, color: colorScheme.onPrimaryContainer),
+                        child: Icon(
+                          Icons.person,
+                          size: 30,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(data.studentName, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                            Text(
+                              data.studentName,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             const SizedBox(height: 4),
-                            Text('ID: ${data.idCode}', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant)),
+                            Text(
+                              'ID: ${data.idCode}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -87,34 +101,68 @@ class SettingsPage extends StatelessWidget {
                   children: [
                     if (data.academyName.isNotEmpty)
                       ListTile(
-                        leading: Icon(Icons.account_balance_outlined, color: colorScheme.primary),
+                        leading: Icon(
+                          Icons.account_balance_outlined,
+                          color: colorScheme.primary,
+                        ),
                         title: const Text('学校'),
-                        trailing: Text(data.academyName, style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant)),
+                        trailing: Text(
+                          data.academyName,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                    if (data.academyName.isNotEmpty && data.specialityName.isNotEmpty)
+                    if (data.academyName.isNotEmpty &&
+                        data.specialityName.isNotEmpty)
                       const Divider(height: 1, indent: 56),
                     // PLACEHOLDER_MORE_DETAILS
                     if (data.specialityName.isNotEmpty)
                       ListTile(
-                        leading: Icon(Icons.location_on_outlined, color: colorScheme.primary),
+                        leading: Icon(
+                          Icons.location_on_outlined,
+                          color: colorScheme.primary,
+                        ),
                         title: const Text('校区'),
-                        trailing: Text(data.specialityName, style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant)),
+                        trailing: Text(
+                          data.specialityName,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                    if (data.specialityName.isNotEmpty && data.gradeName.isNotEmpty)
+                    if (data.specialityName.isNotEmpty &&
+                        data.gradeName.isNotEmpty)
                       const Divider(height: 1, indent: 56),
                     if (data.gradeName.isNotEmpty)
                       ListTile(
-                        leading: Icon(Icons.school_outlined, color: colorScheme.primary),
+                        leading: Icon(
+                          Icons.school_outlined,
+                          color: colorScheme.primary,
+                        ),
                         title: const Text('年级'),
-                        trailing: Text(data.gradeName, style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant)),
+                        trailing: Text(
+                          data.gradeName,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     if (data.gradeName.isNotEmpty && data.className.isNotEmpty)
                       const Divider(height: 1, indent: 56),
                     if (data.className.isNotEmpty)
                       ListTile(
-                        leading: Icon(Icons.class_outlined, color: colorScheme.primary),
+                        leading: Icon(
+                          Icons.class_outlined,
+                          color: colorScheme.primary,
+                        ),
                         title: const Text('班级'),
-                        trailing: Text(data.className, style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant)),
+                        trailing: Text(
+                          data.className,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -127,21 +175,30 @@ class SettingsPage extends StatelessWidget {
                 child: Column(
                   children: [
                     ListTile(
-                      leading: Icon(Icons.credit_card_outlined, color: colorScheme.primary),
+                      leading: Icon(
+                        Icons.credit_card_outlined,
+                        color: colorScheme.primary,
+                      ),
                       title: const Text('账户操作'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _pushAccountOperation(context),
                     ),
                     const Divider(height: 1, indent: 56),
                     ListTile(
-                      leading: Icon(Icons.folder_outlined, color: colorScheme.primary),
+                      leading: Icon(
+                        Icons.folder_outlined,
+                        color: colorScheme.primary,
+                      ),
                       title: const Text('数据管理'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _pushDataManagement(context),
                     ),
                     const Divider(height: 1, indent: 56),
                     ListTile(
-                      leading: Icon(Icons.info_outline, color: colorScheme.primary),
+                      leading: Icon(
+                        Icons.info_outline,
+                        color: colorScheme.primary,
+                      ),
                       title: const Text('关于'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _pushAbout(context),
@@ -191,11 +248,20 @@ class SettingsPage extends StatelessWidget {
             padding: const EdgeInsets.all(24.0),
             child: Column(
               children: [
-                Icon(Icons.account_circle_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.account_circle_outlined,
+                  size: 64,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(height: 16),
                 Text('尚未初始化账号', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
-                Text('请先完成账号绑定', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant)),
+                Text(
+                  '请先完成账号绑定',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           ),

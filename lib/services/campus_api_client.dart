@@ -4,11 +4,11 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/models/campus_sync_payload.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
-import 'package:mobile_app/services/app_log_service.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/models/campus_sync_payload.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
 
 // ---------------------------------------------------------------------------
 // Types for isolate boundary

@@ -1,4 +1,4 @@
-import 'package:mobile_app/models/transaction_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
 
 class DailySpending {
   const DailySpending({

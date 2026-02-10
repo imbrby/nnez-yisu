@@ -117,8 +117,10 @@ class TransactionRecord {
     ).firstMatch(timeStr);
     if (match != null) {
       String pad(String v) => v.padLeft(2, '0');
-      occurredDay = '${match.group(1)!}-${pad(match.group(2)!)}-${pad(match.group(3)!)}';
-      occurredAt = '$occurredDay ${pad(match.group(4)!)}:${pad(match.group(5)!)}:${pad(match.group(6)!)}';
+      occurredDay =
+          '${match.group(1)!}-${pad(match.group(2)!)}-${pad(match.group(3)!)}';
+      occurredAt =
+          '$occurredDay ${pad(match.group(4)!)}:${pad(match.group(5)!)}:${pad(match.group(6)!)}';
     }
 
     return TransactionRecord(

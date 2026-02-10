@@ -2,19 +2,19 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/models/monthly_summary.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
-import 'package:mobile_app/pages/detail_page.dart';
-import 'package:mobile_app/pages/home_page.dart';
-import 'package:mobile_app/pages/settings_page.dart';
-import 'package:mobile_app/services/app_log_service.dart';
-import 'package:mobile_app/services/app_update_service.dart';
-import 'package:mobile_app/services/background_sync_service.dart';
-import 'package:mobile_app/services/canteen_repository.dart';
-import 'package:mobile_app/services/data_transfer_service.dart';
-import 'package:mobile_app/services/widget_service.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/models/monthly_summary.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
+import 'package:nnez_yisu/pages/detail_page.dart';
+import 'package:nnez_yisu/pages/home_page.dart';
+import 'package:nnez_yisu/pages/settings_page.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/app_update_service.dart';
+import 'package:nnez_yisu/services/background_sync_service.dart';
+import 'package:nnez_yisu/services/canteen_repository.dart';
+import 'package:nnez_yisu/services/data_transfer_service.dart';
+import 'package:nnez_yisu/services/widget_service.dart';
 import 'package:workmanager/workmanager.dart';
 
 @pragma('vm:entry-point')

@@ -1,6 +1,6 @@
-import 'package:mobile_app/models/campus_profile.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
+import 'package:nnez_yisu/models/campus_profile.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
 
 class CampusSyncPayload {
   const CampusSyncPayload({

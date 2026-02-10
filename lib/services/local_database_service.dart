@@ -1,8 +1,8 @@
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:mobile_app/services/app_log_service.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
+import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
 import 'package:sqflite/sqflite.dart';
 
 class LocalDatabaseService {

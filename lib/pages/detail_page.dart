@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/expense_classifier.dart';
-import 'package:mobile_app/core/time_utils.dart';
-import 'package:mobile_app/models/recharge_record.dart';
-import 'package:mobile_app/models/transaction_record.dart';
+import 'package:nnez_yisu/core/expense_classifier.dart';
+import 'package:nnez_yisu/core/time_utils.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
 
 enum _DetailMode { month, day }
 

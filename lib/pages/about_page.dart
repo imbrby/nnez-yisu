@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/services/app_update_service.dart';
+import 'package:nnez_yisu/services/app_update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const _repoUrl = 'https://github.com/imbrby/nnez-canteen-mobile';
+const _repoUrl = 'https://github.com/imbrby/nnez-yisu';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
