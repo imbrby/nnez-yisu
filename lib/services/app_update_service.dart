@@ -158,7 +158,7 @@ class AppUpdateService {
         );
       }
 
-      if (latestVersion.compareTo(currentVersion) <= 0) {
+      if (latestVersion.compareCoreTo(currentVersion) <= 0) {
         return UpdateCheckResult(
           hasUpdate: false,
           currentVersionLabel: currentVersionLabel,
@@ -491,5 +491,11 @@ class _ParsedVersion implements Comparable<_ParsedVersion> {
     if (minor != other.minor) return minor.compareTo(other.minor);
     if (patch != other.patch) return patch.compareTo(other.patch);
     return build.compareTo(other.build);
+  }
+
+  int compareCoreTo(_ParsedVersion other) {
+    if (major != other.major) return major.compareTo(other.major);
+    if (minor != other.minor) return minor.compareTo(other.minor);
+    return patch.compareTo(other.patch);
   }
 }
