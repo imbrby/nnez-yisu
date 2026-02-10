@@ -1,11 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:nnez_yisu/models/recharge_record.dart';
 import 'package:nnez_yisu/models/transaction_record.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class LocalDatabaseService {
+  static bool _databaseFactoryConfigured = false;
   Database? _db;
 
   static Future<String> resolveDatabasePath() async {
@@ -23,6 +25,7 @@ class LocalDatabaseService {
       _logInfo('init skipped: already opened');
       return;
     }
+    _configureDatabaseFactoryIfNeeded();
     final dbPath = await resolveDatabasePath();
     _logInfo('init start path=$dbPath');
     _db = await openDatabase(
@@ -39,6 +42,20 @@ class LocalDatabaseService {
       },
     );
     _logInfo('init done');
+  }
+
+  static void _configureDatabaseFactoryIfNeeded() {
+    if (_databaseFactoryConfigured || kIsWeb) return;
+    final platform = defaultTargetPlatform;
+    final isDesktop =
+        platform == TargetPlatform.windows ||
+        platform == TargetPlatform.linux ||
+        platform == TargetPlatform.macOS;
+    if (!isDesktop) return;
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    _databaseFactoryConfigured = true;
+    AppLogService.instance.info('已初始化 sqflite ffi', tag: 'DB');
   }
 
   Database get db {
