@@ -56,6 +56,25 @@ class AppUpdateService {
       'https://api.github.com/repos/$_repoOwner/$_repoName/releases/latest';
   static const _prefAutoCheck = 'app_auto_check_update_enabled';
   static const _prefSkipTag = 'app_update_skip_tag';
+  static const _prefPendingApkFiles = 'app_update_pending_apk_files';
+
+  Future<void> cleanupPendingPackages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = List<String>.from(
+      prefs.getStringList(_prefPendingApkFiles) ?? const <String>[],
+    );
+    if (pending.isEmpty) return;
+    final remain = <String>[];
+    for (final path in pending) {
+      final deleted = await _deletePackageFile(path);
+      if (!deleted) remain.add(path);
+    }
+    if (remain.isEmpty) {
+      await prefs.remove(_prefPendingApkFiles);
+    } else {
+      await prefs.setStringList(_prefPendingApkFiles, remain);
+    }
+  }
 
   Future<bool> isAutoCheckEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -80,9 +99,8 @@ class AppUpdateService {
     bool ignoreSkippedTag = false,
   }) async {
     final info = await PackageInfo.fromPlatform();
-    final currentVersion = _ParsedVersion.parse(
-      '${info.version}+${info.buildNumber}',
-    );
+    final currentVersionRaw = '${info.version}+${info.buildNumber}';
+    final currentVersion = _ParsedVersion.parse(currentVersionRaw);
     final currentVersionLabel = _versionLabel(info.version, info.buildNumber);
 
     final client = HttpClient();
@@ -119,8 +137,28 @@ class AppUpdateService {
           ? tagName
           : 'v$tagName';
 
-      final compare = latestVersion.compareTo(currentVersion);
-      if (compare <= 0) {
+      final normalizedCurrent = _normalizeVersionLikeText(currentVersionRaw);
+      final normalizedLatest = _normalizeVersionLikeText(tagName);
+      if (normalizedCurrent.isNotEmpty &&
+          normalizedCurrent == normalizedLatest) {
+        return UpdateCheckResult(
+          hasUpdate: false,
+          currentVersionLabel: currentVersionLabel,
+          latestVersionLabel: latestVersionLabel,
+          message: '已是最新版本',
+        );
+      }
+
+      if (latestVersion == null || currentVersion == null) {
+        return UpdateCheckResult(
+          hasUpdate: false,
+          currentVersionLabel: currentVersionLabel,
+          latestVersionLabel: latestVersionLabel,
+          message: '检查失败（版本号格式不支持）',
+        );
+      }
+
+      if (latestVersion.compareTo(currentVersion) <= 0) {
         return UpdateCheckResult(
           hasUpdate: false,
           currentVersionLabel: currentVersionLabel,
@@ -203,41 +241,56 @@ class AppUpdateService {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('发现新版本'),
-        content: Text(
-          '最新版本: ${result.latestVersionLabel}\n'
-          '当前版本: ${result.currentVersionLabel}',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '最新版本: ${result.latestVersionLabel}\n'
+              '当前版本: ${result.currentVersionLabel}',
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await setSkippedTag(release.tagName);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('跳过本次更新'),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () async {
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      await downloadAndInstall(
+                        context: context,
+                        release: release,
+                        channel: UpdateDownloadChannel.mirror,
+                      );
+                    },
+                    child: const Text('镜像更新'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: () async {
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      await downloadAndInstall(
+                        context: context,
+                        release: release,
+                        channel: UpdateDownloadChannel.github,
+                      );
+                    },
+                    child: const Text('GitHub更新'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await setSkippedTag(release.tagName);
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('跳过本次更新'),
-          ),
-          FilledButton.tonal(
-            onPressed: () async {
-              if (ctx.mounted) Navigator.pop(ctx);
-              await downloadAndInstall(
-                context: context,
-                release: release,
-                channel: UpdateDownloadChannel.mirror,
-              );
-            },
-            child: const Text('镜像更新'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (ctx.mounted) Navigator.pop(ctx);
-              await downloadAndInstall(
-                context: context,
-                release: release,
-                channel: UpdateDownloadChannel.github,
-              );
-            },
-            child: const Text('GitHub更新（不推荐）'),
-          ),
-        ],
       ),
     );
   }
@@ -293,6 +346,8 @@ class AppUpdateService {
       if (openResult.type != ResultType.done) {
         throw Exception('无法打开安装器: ${openResult.message}');
       }
+      await _addPendingPackagePath(filePath);
+      unawaited(_deletePackageWhenPossible(filePath));
       showMessage('已下载完成，正在打开安装器');
     } catch (error, stackTrace) {
       AppLogService.instance.error(
@@ -328,6 +383,59 @@ class AppUpdateService {
     final raw = error.toString();
     return raw.replaceFirst(RegExp(r'^Exception:\s*'), '');
   }
+
+  static String _normalizeVersionLikeText(String raw) {
+    var value = raw.trim();
+    if (value.startsWith('v') || value.startsWith('V')) {
+      value = value.substring(1);
+    }
+    final match = RegExp(r'(\d+\.\d+\.\d+(?:\+\d+)?)').firstMatch(value);
+    if (match != null) return match.group(1)!;
+    return value;
+  }
+
+  Future<void> _addPendingPackagePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = List<String>.from(
+      prefs.getStringList(_prefPendingApkFiles) ?? const <String>[],
+    );
+    if (!pending.contains(path)) {
+      pending.add(path);
+      await prefs.setStringList(_prefPendingApkFiles, pending);
+    }
+  }
+
+  Future<void> _removePendingPackagePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = List<String>.from(
+      prefs.getStringList(_prefPendingApkFiles) ?? const <String>[],
+    );
+    pending.remove(path);
+    if (pending.isEmpty) {
+      await prefs.remove(_prefPendingApkFiles);
+    } else {
+      await prefs.setStringList(_prefPendingApkFiles, pending);
+    }
+  }
+
+  Future<void> _deletePackageWhenPossible(String path) async {
+    await Future<void>.delayed(const Duration(minutes: 2));
+    final deleted = await _deletePackageFile(path);
+    if (deleted) {
+      await _removePendingPackagePath(path);
+    }
+  }
+
+  Future<bool> _deletePackageFile(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return true;
+      await file.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class _ParsedVersion implements Comparable<_ParsedVersion> {
@@ -343,7 +451,7 @@ class _ParsedVersion implements Comparable<_ParsedVersion> {
   final int patch;
   final int build;
 
-  factory _ParsedVersion.parse(String raw) {
+  static _ParsedVersion? parse(String raw) {
     var normalized = raw.trim();
     if (normalized.startsWith('v') || normalized.startsWith('V')) {
       normalized = normalized.substring(1);
@@ -362,6 +470,7 @@ class _ParsedVersion implements Comparable<_ParsedVersion> {
     final major = versionNumbers.isNotEmpty ? versionNumbers[0] : 0;
     final minor = versionNumbers.length > 1 ? versionNumbers[1] : 0;
     final patch = versionNumbers.length > 2 ? versionNumbers[2] : 0;
+    if (versionNumbers.length < 3) return null;
 
     final buildMatch = RegExp(r'\d+').firstMatch(buildPart);
     final build = buildMatch == null

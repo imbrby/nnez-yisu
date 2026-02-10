@@ -138,6 +138,7 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _logInfo('AppShell initState');
+    unawaited(AppUpdateService.instance.cleanupPendingPackages());
     _startAutoSyncTimer();
     _bootstrap();
     WidgetsBinding.instance.addPostFrameCallback((_) {

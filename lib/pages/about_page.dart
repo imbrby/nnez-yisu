@@ -12,7 +12,7 @@ class AboutPage extends StatefulWidget {
   State<AboutPage> createState() => _AboutPageState();
 }
 
-class _AboutPageState extends State<AboutPage> {
+class _AboutPageState extends State<AboutPage> with WidgetsBindingObserver {
   String _versionLabel = '';
   String? _updateInfo;
   bool _checking = false;
@@ -21,7 +21,21 @@ class _AboutPageState extends State<AboutPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMeta();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadMeta();
+    }
   }
 
   Future<void> _loadMeta() async {
@@ -37,6 +51,7 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Future<void> _checkUpdate({required bool manual}) async {
+    await _loadMeta();
     setState(() {
       _checking = true;
       _updateInfo = null;
