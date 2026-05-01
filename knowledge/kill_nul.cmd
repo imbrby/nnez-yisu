@@ -1,0 +1,1 @@
+del "\\?\D:\code\nnez-canteen-mobile\nul"

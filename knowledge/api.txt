@@ -1,0 +1,229 @@
+登录请求1
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=nul1k0wph3akd4qbbeutgudc",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/login"
+  },
+  "body": "method=loginauthtype",
+  "method": "POST"
+});
+登录请求2 第一次无需验证码
+fetch("http://xfxt.nnez.cn:455/interface/login", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=nul1k0wph3akd4qbbeutgudc",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/login"
+  },
+  "body": "sid=240419&passWord=d3p0MzExNzAx&verifycode=&ismobile=1",
+  "method": "POST"
+});
+登录请求3 第二次需要验证码且失败
+fetch("http://xfxt.nnez.cn:455/interface/tchlogin", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=nul1k0wph3akd4qbbeutgudc",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/login"
+  },
+  "body": "sid=2024507&passWord=d3p0MzExNzAx&verifycode=1&ismobile=1",
+  "method": "POST"
+});
+获取验证码
+fetch("http://xfxt.nnez.cn:455/interface/getVerifyCode?0.1855946654597378", {
+  "headers": {
+    "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "proxy-connection": "keep-alive",
+    "cookie": "ASP.NET_SessionId=nul1k0wph3akd4qbbeutgudc",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/login"
+  },
+  "body": null,
+  "method": "GET"
+});
+登录成功时
+fetch("http://xfxt.nnez.cn:455/interface/login", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=kkg3mg0yy1ubv3tdareb1zdz; themeColor=",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/login"
+  },
+  "body": "sid=2024507&passWord=d3p0MzExNzAx&verifycode=Dt01&ismobile=1",
+  "method": "POST"
+});
+请求食堂流水
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=kkg3mg0yy1ubv3tdareb1zdz; themeColor=",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/yktxfjl"
+  },
+  "body": "method=getecardxfmx&stuid=1&carno=2024507&starttime=2026-02-02&endtime=2026-02-02",
+  "method": "POST"
+});
+响应
+{
+    "state": 200,
+    "data": [
+        {
+            "Id": "9961996",
+            "Money": "6.8",
+            "Balance": "-1",
+            "Time": "2026/2/2 17:17:32",
+            "ItemName": "卡片交易-学生食堂010号机"
+        },
+        {
+            "Id": "9959457",
+            "Money": "7.6",
+            "Balance": "-1",
+            "Time": "2026/2/2 12:12:33",
+            "ItemName": "卡片交易-学生食堂012号机"
+        },
+        {
+            "Id": "9959447",
+            "Money": "6.8",
+            "Balance": "-1",
+            "Time": "2026/2/2 12:12:06",
+            "ItemName": "卡片交易-学生食堂012号机"
+        }
+    ],
+    "success": true
+}
+登录界面保存在login文件里。
+说明：
+1.第一次尝试登录不需要验证码，第六次不允许登录。
+2.虽然如此，但是如果我使用无痕模式时，这个计数又会清零。
+最近充值：
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=fqexpgb1pbipiokfw5qscigs",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/jyjl?refreshtime=20260209093903"
+  },
+  "body": "method=getorderlistbytime&stuid=1&startdate=2026-02-09&enddate=2026-02-10",
+  "method": "POST"
+});
+示例返回：
+{
+    "state": 200,
+    "data": [
+        {
+            "riqi": "2026/1/22 23:16:56",
+            "yinhang": "桂林佳朋聚合支付",
+            "dingdanhao": "cz01222316562024507",
+            "shuoming": "2024507",
+            "jiner": "300.00",
+            "xuhao": "713865",
+            "zhuangtai": "支付成功",
+            "id": "788456",
+            "payment": "True",
+            "bank_name": "gljpv3",
+            "billClosed": "False",
+            "paymentUrl": "&isTelphone=true",
+            "paymentcolumn": "False",
+            "order_items": "2024507:300.00;",
+            "business_type": "13",
+            "is_show_wzyz_ticket": ""
+        },
+        {
+            "riqi": "2026/1/4 14:17:26",
+            "yinhang": "桂林佳朋聚合支付",
+            "dingdanhao": "cz01041417262024507",
+            "shuoming": "2024507",
+            "jiner": "300.00",
+            "xuhao": "696285",
+            "zhuangtai": "支付成功",
+            "id": "767782",
+            "payment": "True",
+            "bank_name": "gljpv3",
+            "billClosed": "False",
+            "paymentUrl": "&isTelphone=true",
+            "paymentcolumn": "False",
+            "order_items": "2024507:300.00;",
+            "business_type": "13",
+            "is_show_wzyz_ticket": ""
+        },
+        {
+            "riqi": "2025/12/27 17:42:55",
+            "yinhang": "桂林佳朋聚合支付",
+            "dingdanhao": "cz12271742552024507",
+            "shuoming": "2024507",
+            "jiner": "100.00",
+            "xuhao": "691003",
+            "zhuangtai": "支付成功",
+            "id": "762043",
+            "payment": "True",
+            "bank_name": "gljpv3",
+            "billClosed": "False",
+            "paymentUrl": "&isTelphone=true",
+            "paymentcolumn": "False",
+            "order_items": "2024507:100.00;",
+            "business_type": "13",
+            "is_show_wzyz_ticket": ""
+        }
+    ],
+    "success": true
+}
+挂失：
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=fqexpgb1pbipiokfw5qscigs; themeColor=",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/yktgsjg"
+  },
+  "body": "method=ecardguashi&stuid=0&carno=1180",
+  "method": "POST"
+});
+返回：
+{
+    "state": 200,
+    "data": "挂失成功",
+    "success": true
+}
+解挂：
+fetch("http://xfxt.nnez.cn:455/interface/index", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "proxy-connection": "keep-alive",
+    "x-requested-with": "XMLHttpRequest",
+    "cookie": "ASP.NET_SessionId=fqexpgb1pbipiokfw5qscigs; themeColor=",
+    "Referer": "http://xfxt.nnez.cn:455/mobile/yktgsjg"
+  },
+  "body": "method=ecardjiegua&stuid=0&carno=1180",
+  "method": "POST"
+});
+返回：
+{
+    "state": 200,
+    "data": "解挂成功",
+    "success": true
+}
