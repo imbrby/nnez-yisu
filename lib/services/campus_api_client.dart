@@ -32,7 +32,7 @@ class _IsolateResult {
 // Top-level isolate entry point
 // ---------------------------------------------------------------------------
 
-const String _baseUrl = 'http://xfxt.nnedu.com:455';
+const String _baseUrl = 'https://xfxt.nnedu.com:455';
 const Duration _stepTimeout = Duration(seconds: 18);
 
 Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
