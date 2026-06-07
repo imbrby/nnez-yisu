@@ -268,7 +268,7 @@ class CanteenRepository {
     if (sid.isEmpty) return;
     final legacy = _storage.loadTransactionsLegacy();
     if (legacy.isEmpty) return;
-    _logInfo('migrating legacy transactions for sid=$sid');
+    _logInfo('migrating legacy transactions');
     final all = legacy.values.expand((list) => list).toList();
     final stamped = all.map((t) => t.sid.isEmpty ? t.withSid(sid) : t).toList();
     await _db.upsertTransactions(sid, stamped);

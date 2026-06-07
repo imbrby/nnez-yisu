@@ -1,56 +1,89 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
+# OS files
 .DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-.claude/
-.knowledge/
-migrate_working_dir/
+Thumbs.db
+desktop.ini
 
-# IntelliJ related
+# Editors and local tooling
+.idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
-.idea/
+.history/
+.claude/
+.codex/
+.fvm/
+knowledge/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+*.jks
+*.keystore
+android/key.properties
+android/local.properties
+android/app/*.jks
+android/app/*.keystore
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# Dart and Flutter
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Local/generated tool caches
-/android/.gradle/
-/android/.kotlin/
-/android/local.properties
-/android/key.properties
-*.jks
+build/
+coverage/
+**/doc/api/
 **/flutter/ephemeral/
 **/.plugin_symlinks/
+
+# Android
+android/.gradle/
+android/.kotlin/
+android/.cxx/
+android/captures/
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.apk
+*.aab
+*.ap_
+
+# Apple platform local output, in case those platforms are regenerated
+**/Pods/
+**/DerivedData/
+**/xcuserdata/
+**/*.mode1v3
+**/*.mode2v3
+**/*.moved-aside
+**/*.pbxuser
+**/*.perspectivev3
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+macos/Flutter/ephemeral/
+
+# Windows and Linux build output
+windows/flutter/ephemeral/
+windows/x64/
+windows/x86/
+linux/flutter/ephemeral/
+
+# Logs, diagnostics, and local data
+*.log
+*.tmp
+*.temp
+*.bak
+*.sqlite
+*.sqlite3
+*.db
+app.*.symbols
+app.*.map.json
+migrate_working_dir/

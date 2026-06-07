@@ -68,7 +68,7 @@ jobs:
         run: flutter test
 
       - name: Build release APK (arm64 only)
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk --release --target-platform android-arm64 --dart-define=APP_UPDATE_REPOSITORY=${{ github.repository }}
 
       - name: Generate version tag
         id: version
@@ -109,7 +109,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows (release)
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=APP_UPDATE_REPOSITORY=${{ github.repository }}
 
       - name: Package Windows app
         shell: pwsh
@@ -152,7 +152,7 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: OWNER/REPOSITORY
+          REPO: ${{ github.repository }}
           TAG: ${{ needs.build-android.outputs.tag }}
           RELEASE_NAME: 一粟 ${{ needs.build-android.outputs.tag }}
           COMMIT_SHA: ${{ github.sha }}

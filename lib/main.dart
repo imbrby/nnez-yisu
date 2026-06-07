@@ -322,7 +322,7 @@ class _AppShellState extends State<AppShell> {
       });
       return;
     }
-    _logInfo('开始初始化账号 sid=$sid');
+    _logInfo('开始初始化账号');
 
     setState(() {
       _settingUp = true;
@@ -406,7 +406,6 @@ class _AppShellState extends State<AppShell> {
       final json = await repo.exportToJson();
       final savedPath = await DataTransferService.exportWithSystemFileManager(
         json,
-        repo.currentSid,
       );
       if (!mounted) return;
       setState(() => _status = savedPath == null ? '已取消导出' : '导出完成');
@@ -718,7 +717,10 @@ class _AppShellState extends State<AppShell> {
                       icon: Icon(Icons.receipt_long_outlined),
                       label: '细目',
                     ),
-                    NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
+                    NavigationDestination(
+                      icon: Icon(Icons.settings),
+                      label: '设置',
+                    ),
                   ],
                 ),
           floatingActionButton: hasCredential && _tabIndex == 0

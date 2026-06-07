@@ -27,7 +27,7 @@ class LocalDatabaseService {
     }
     _configureDatabaseFactoryIfNeeded();
     final dbPath = await resolveDatabasePath();
-    _logInfo('init start path=$dbPath');
+    _logInfo('init start');
     _db = await openDatabase(
       dbPath,
       version: 2,
@@ -72,10 +72,10 @@ class LocalDatabaseService {
     void Function(String message)? onProgress,
   }) async {
     if (rows.isEmpty) {
-      _logInfo('upsert skipped: rows=0 sid=$sid');
+      _logInfo('upsert skipped: rows=0');
       return;
     }
-    _logInfo('upsert start sid=$sid rows=${rows.length}');
+    _logInfo('upsert start rows=${rows.length}');
 
     const chunkSize = 250;
     var processed = 0;
@@ -97,7 +97,7 @@ class LocalDatabaseService {
       _logInfo('upsert chunk committed $processed/${rows.length}');
       onProgress?.call('正在写入本地数据...$processed/${rows.length}');
     }
-    _logInfo('upsert done sid=$sid rows=${rows.length}');
+    _logInfo('upsert done rows=${rows.length}');
   }
 
   Future<List<Map<String, Object?>>> queryDailyTotals({
@@ -120,14 +120,14 @@ class LocalDatabaseService {
     required String startDate,
     required String endDate,
   }) async {
-    _logInfo('queryByDayRange start sid=$sid $startDate~$endDate');
+    _logInfo('queryByDayRange start $startDate~$endDate');
     final rows = await db.query(
       'transactions',
       where: 'sid = ? AND occurred_day BETWEEN ? AND ?',
       whereArgs: <Object?>[sid, startDate, endDate],
       orderBy: 'occurred_at ASC, txn_id ASC',
     );
-    _logInfo('queryByDayRange done sid=$sid rows=${rows.length}');
+    _logInfo('queryByDayRange done rows=${rows.length}');
     return rows.map(TransactionRecord.fromDbMap).toList();
   }
 
@@ -150,7 +150,7 @@ class LocalDatabaseService {
     required String sid,
     int limit = 20,
   }) async {
-    _logInfo('queryRecent start sid=$sid limit=$limit');
+    _logInfo('queryRecent start limit=$limit');
     final rows = await db.query(
       'transactions',
       where: 'sid = ?',
@@ -158,7 +158,7 @@ class LocalDatabaseService {
       orderBy: 'occurred_at DESC, txn_id DESC',
       limit: limit,
     );
-    _logInfo('queryRecent done sid=$sid rows=${rows.length}');
+    _logInfo('queryRecent done rows=${rows.length}');
     return rows.map(TransactionRecord.fromDbMap).toList();
   }
 
@@ -173,10 +173,10 @@ class LocalDatabaseService {
     void Function(String message)? onProgress,
   }) async {
     if (rows.isEmpty) {
-      _logInfo('upsertRecharges skipped: rows=0 sid=$sid');
+      _logInfo('upsertRecharges skipped: rows=0');
       return;
     }
-    _logInfo('upsertRecharges start sid=$sid rows=${rows.length}');
+    _logInfo('upsertRecharges start rows=${rows.length}');
     const chunkSize = 250;
     var processed = 0;
     while (processed < rows.length) {
@@ -194,14 +194,14 @@ class LocalDatabaseService {
       await batch.commit(noResult: true);
       processed = end;
     }
-    _logInfo('upsertRecharges done sid=$sid rows=${rows.length}');
+    _logInfo('upsertRecharges done rows=${rows.length}');
   }
 
   Future<List<RechargeRecord>> queryRecentRecharges({
     required String sid,
     int limit = 20,
   }) async {
-    _logInfo('queryRecentRecharges start sid=$sid limit=$limit');
+    _logInfo('queryRecentRecharges start limit=$limit');
     final rows = await db.query(
       'recharges',
       where: 'sid = ? AND status = ?',
@@ -209,7 +209,7 @@ class LocalDatabaseService {
       orderBy: 'occurred_at DESC, order_id DESC',
       limit: limit,
     );
-    _logInfo('queryRecentRecharges done sid=$sid rows=${rows.length}');
+    _logInfo('queryRecentRecharges done rows=${rows.length}');
     return rows.map(RechargeRecord.fromDbMap).toList();
   }
 
@@ -218,14 +218,14 @@ class LocalDatabaseService {
     required String startDate,
     required String endDate,
   }) async {
-    _logInfo('queryRechargesByDayRange start sid=$sid $startDate~$endDate');
+    _logInfo('queryRechargesByDayRange start $startDate~$endDate');
     final rows = await db.query(
       'recharges',
       where: 'sid = ? AND status = ? AND occurred_day BETWEEN ? AND ?',
       whereArgs: <Object?>[sid, '支付成功', startDate, endDate],
       orderBy: 'occurred_at ASC, order_id ASC',
     );
-    _logInfo('queryRechargesByDayRange done sid=$sid rows=${rows.length}');
+    _logInfo('queryRechargesByDayRange done rows=${rows.length}');
     return rows.map(RechargeRecord.fromDbMap).toList();
   }
 

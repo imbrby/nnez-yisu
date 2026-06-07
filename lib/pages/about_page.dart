@@ -3,8 +3,6 @@ import 'package:nnez_yisu/services/app_update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const _repoUrl = 'https://github.com/OWNER/REPOSITORY';
-
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
 
@@ -79,6 +77,7 @@ class _AboutPageState extends State<AboutPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final repoUrl = appUpdateRepositoryUrl;
 
     return Scaffold(
       appBar: AppBar(title: const Text('关于')),
@@ -139,19 +138,21 @@ class _AboutPageState extends State<AboutPage> with WidgetsBindingObserver {
                       : const Icon(Icons.chevron_right),
                   onTap: _checking ? null : () => _checkUpdate(manual: true),
                 ),
-                const Divider(height: 1, indent: 56),
-                ListTile(
-                  leading: Icon(
-                    Icons.code_outlined,
-                    color: colorScheme.primary,
+                if (repoUrl != null) ...[
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: Icon(
+                      Icons.code_outlined,
+                      color: colorScheme.primary,
+                    ),
+                    title: const Text('GitHub'),
+                    trailing: const Icon(Icons.open_in_new, size: 18),
+                    onTap: () => launchUrl(
+                      Uri.parse(repoUrl),
+                      mode: LaunchMode.externalApplication,
+                    ),
                   ),
-                  title: const Text('GitHub'),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
-                  onTap: () => launchUrl(
-                    Uri.parse(_repoUrl),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                ),
+                ],
               ],
             ),
           ),

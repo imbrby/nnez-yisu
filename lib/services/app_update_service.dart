@@ -10,8 +10,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const _repoOwner = 'OWNER';
-const _repoName = 'nnez-yisu';
+const appUpdateRepository = String.fromEnvironment('APP_UPDATE_REPOSITORY');
+
+String? get appUpdateRepositoryUrl {
+  final repo = appUpdateRepository.trim();
+  if (repo.isEmpty) return null;
+  return 'https://github.com/$repo';
+}
 
 enum UpdateDownloadChannel { mirror, github }
 
@@ -54,8 +59,6 @@ class AppUpdateService {
 
   static final AppUpdateService instance = AppUpdateService._();
 
-  static const _apiLatestRelease =
-      'https://api.github.com/repos/$_repoOwner/$_repoName/releases/latest';
   static const _prefAutoCheck = 'app_auto_check_update_enabled';
   static const _prefSkipTag = 'app_update_skip_tag';
   static const _prefPendingApkFiles = 'app_update_pending_apk_files';
@@ -104,10 +107,19 @@ class AppUpdateService {
     final currentVersionRaw = '${info.version}+${info.buildNumber}';
     final currentVersion = _ParsedVersion.parse(currentVersionRaw);
     final currentVersionLabel = _versionLabel(info.version, info.buildNumber);
+    final latestReleaseUri = _latestReleaseUri();
+    if (latestReleaseUri == null) {
+      return UpdateCheckResult(
+        hasUpdate: false,
+        currentVersionLabel: currentVersionLabel,
+        latestVersionLabel: '',
+        message: '未配置更新仓库',
+      );
+    }
 
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(_apiLatestRelease));
+      final request = await client.getUrl(latestReleaseUri);
       request.headers.set('Accept', 'application/vnd.github.v3+json');
       request.headers.set('User-Agent', 'nnez-yisu');
       final response = await request.close().timeout(
@@ -247,9 +259,7 @@ class AppUpdateService {
             ),
             if (release.downloadUrl == null) ...[
               const SizedBox(height: 8),
-              Text(
-                '当前设备（${release.packagePlatform}）暂无独立安装包，将跳转发布页下载。',
-              ),
+              Text('当前设备（${release.packagePlatform}）暂无独立安装包，将跳转发布页下载。'),
             ],
             const SizedBox(height: 12),
             OutlinedButton(
@@ -406,25 +416,27 @@ class AppUpdateService {
       return _pickAssetByExtensions(assets, const <String>['.apk'], 'Android');
     }
     if (Platform.isWindows) {
-      return _pickAssetByExtensions(
-        assets,
-        const <String>['.zip', '.exe', '.msix'],
-        'Windows',
-      );
+      return _pickAssetByExtensions(assets, const <String>[
+        '.zip',
+        '.exe',
+        '.msix',
+      ], 'Windows');
     }
     if (Platform.isMacOS) {
-      return _pickAssetByExtensions(
-        assets,
-        const <String>['.dmg', '.pkg', '.zip'],
-        'macOS',
-      );
+      return _pickAssetByExtensions(assets, const <String>[
+        '.dmg',
+        '.pkg',
+        '.zip',
+      ], 'macOS');
     }
     if (Platform.isLinux) {
-      return _pickAssetByExtensions(
-        assets,
-        const <String>['.AppImage', '.deb', '.rpm', '.tar.gz', '.zip'],
-        'Linux',
-      );
+      return _pickAssetByExtensions(assets, const <String>[
+        '.AppImage',
+        '.deb',
+        '.rpm',
+        '.tar.gz',
+        '.zip',
+      ], 'Linux');
     }
     return null;
   }
@@ -460,6 +472,12 @@ class AppUpdateService {
     if (Platform.isLinux) return 'Linux';
     if (Platform.isIOS) return 'iOS';
     return '当前平台';
+  }
+
+  static Uri? _latestReleaseUri() {
+    final repo = appUpdateRepository.trim();
+    if (repo.isEmpty || !repo.contains('/')) return null;
+    return Uri.https('api.github.com', '/repos/$repo/releases/latest');
   }
 
   static String _versionLabel(String version, String buildNumber) {

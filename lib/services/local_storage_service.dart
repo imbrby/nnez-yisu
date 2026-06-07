@@ -137,7 +137,7 @@ class LocalStorageService {
     if (sid.isEmpty) return;
     // Already migrated if active_sid exists
     if (_prefs.containsKey(_activeSidKey)) return;
-    _logInfo('migrateToPerUser start sid=$sid');
+    _logInfo('migrateToPerUser start');
 
     final oldProfile = _prefs.getString(_legacyProfileKey);
     if (oldProfile != null && !_prefs.containsKey(_userProfileKey(sid))) {

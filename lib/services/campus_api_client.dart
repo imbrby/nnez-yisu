@@ -43,7 +43,7 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
   }
 
   logInfo(
-    'fetchAll start sid=${params.sid}'
+    'fetchAll start'
     ' includeTransactions=${params.includeTransactions}'
     ' range=${params.startDate}~${params.endDate}',
   );
@@ -139,7 +139,7 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
     logInfo('balance fetched value=${balance.toStringAsFixed(2)}');
 
     final profile = await _fetchProfile(client, session, logInfo);
-    logInfo('profile fetched sid=${profile.sid} name=${profile.studentName}');
+    logInfo('profile fetched');
 
     // Fetch recharges
     List<Map<String, dynamic>> rechargeRaw = <Map<String, dynamic>>[];
@@ -188,9 +188,7 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
       try {
         final recharge = RechargeRecord.fromRemote(item);
         if (!_isSuccessfulRechargeStatus(recharge.status)) {
-          logInfo(
-            'skip recharge with status="${recharge.status}" order=${recharge.orderId}',
-          );
+          logInfo('skip recharge with status="${recharge.status}"');
           continue;
         }
         rechargeRecords.add(recharge);
@@ -362,7 +360,7 @@ Future<double> _fetchBalance(
   String sid,
   void Function(String) logInfo,
 ) async {
-  logInfo('fetchBalance start sid=$sid');
+  logInfo('fetchBalance start');
   final response = await _postForm(
     client: client,
     session: session,
@@ -489,7 +487,7 @@ Future<_CardOpResult> _cardOpInIsolate(_CardOpParams params) async {
     logs.add('[ERROR][API] $ctx\nerror: $err\nstack:\n$st');
   }
 
-  logInfo('cardOp start method=${params.method} sid=${params.sid}');
+  logInfo('cardOp start method=${params.method}');
 
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
@@ -591,7 +589,7 @@ class CampusApiClient {
     void Function(String message)? onProgress,
   }) async {
     _logInfo(
-      'fetchAll dispatching to isolate sid=$sid'
+      'fetchAll dispatching to isolate'
       ' range=$startDate~$endDate',
     );
     final params = (
@@ -619,7 +617,7 @@ class CampusApiClient {
     required String sid,
     required String plainPassword,
   }) async {
-    _logInfo('reportLoss dispatching to isolate sid=$sid');
+    _logInfo('reportLoss dispatching to isolate');
     final params = (
       sid: sid,
       plainPassword: plainPassword,
@@ -642,7 +640,7 @@ class CampusApiClient {
     required String sid,
     required String plainPassword,
   }) async {
-    _logInfo('cancelLoss dispatching to isolate sid=$sid');
+    _logInfo('cancelLoss dispatching to isolate');
     final params = (
       sid: sid,
       plainPassword: plainPassword,

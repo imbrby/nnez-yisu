@@ -29,7 +29,7 @@ jobs:
         run: flutter test
 
       - name: Build Windows (release)
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=APP_UPDATE_REPOSITORY=${{ github.repository }}
 
       - name: Package Windows app
         shell: pwsh
