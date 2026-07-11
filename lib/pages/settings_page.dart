@@ -3,6 +3,7 @@ import 'package:nnez_yisu/models/campus_profile.dart';
 import 'package:nnez_yisu/pages/about_page.dart';
 import 'package:nnez_yisu/pages/account_operation_page.dart';
 import 'package:nnez_yisu/pages/data_management_page.dart';
+import 'package:nnez_yisu/services/campus_api_client.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -13,6 +14,9 @@ class SettingsPage extends StatelessWidget {
     required this.onImport,
     required this.onReportLoss,
     required this.onCancelLoss,
+    required this.usesCustomBaseUrl,
+    required this.campusBaseUrl,
+    required this.onBaseUrlChanged,
     required this.isBusy,
   });
 
@@ -22,6 +26,9 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onImport;
   final Future<String> Function() onReportLoss;
   final Future<String> Function() onCancelLoss;
+  final bool usesCustomBaseUrl;
+  final String campusBaseUrl;
+  final Future<void> Function(String? customBaseUrl) onBaseUrlChanged;
   final bool isBusy;
 
   @override
@@ -186,6 +193,23 @@ class SettingsPage extends StatelessWidget {
                     const Divider(height: 1, indent: 56),
                     ListTile(
                       leading: Icon(
+                        Icons.language_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('校园接口根网址'),
+                      subtitle: Text(
+                        '${usesCustomBaseUrl ? '自定义' : '默认'} · $campusBaseUrl',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: isBusy
+                          ? null
+                          : () => _showCampusBaseUrlDialog(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: Icon(
                         Icons.folder_outlined,
                         color: colorScheme.primary,
                       ),
@@ -295,11 +319,169 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
+  Future<void> _showCampusBaseUrlDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => _CampusBaseUrlDialog(
+        usesCustomBaseUrl: usesCustomBaseUrl,
+        currentBaseUrl: campusBaseUrl,
+        onSave: onBaseUrlChanged,
+      ),
+    );
+  }
+
   void _pushAbout(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const _LazyAboutPage()),
     );
+  }
+}
+
+class _CampusBaseUrlDialog extends StatefulWidget {
+  const _CampusBaseUrlDialog({
+    required this.usesCustomBaseUrl,
+    required this.currentBaseUrl,
+    required this.onSave,
+  });
+
+  final bool usesCustomBaseUrl;
+  final String currentBaseUrl;
+  final Future<void> Function(String? customBaseUrl) onSave;
+
+  @override
+  State<_CampusBaseUrlDialog> createState() => _CampusBaseUrlDialogState();
+}
+
+class _CampusBaseUrlDialogState extends State<_CampusBaseUrlDialog> {
+  late bool _useCustom = widget.usesCustomBaseUrl;
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.usesCustomBaseUrl
+        ? widget.currentBaseUrl
+        : defaultCampusBaseUrl,
+  );
+  bool _saving = false;
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('校园接口根网址'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            RadioGroup<bool>(
+              groupValue: _useCustom,
+              onChanged: (value) {
+                if (!_saving && value != null) _selectMode(value);
+              },
+              child: Column(
+                children: [
+                  RadioListTile<bool>(
+                    contentPadding: EdgeInsets.zero,
+                    value: false,
+                    enabled: !_saving,
+                    title: const Text('默认'),
+                    subtitle: const Text(defaultCampusBaseUrl),
+                  ),
+                  RadioListTile<bool>(
+                    contentPadding: EdgeInsets.zero,
+                    value: true,
+                    enabled: !_saving,
+                    title: const Text('自定义'),
+                    subtitle: const Text('仅支持以 http:// 或 https:// 开头的根网址'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              enabled: _useCustom && !_saving,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: '自定义根网址',
+                hintText: 'http://example.com:455',
+                errorText: _errorText,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_errorText != null) setState(() => _errorText = null);
+              },
+              onSubmitted: (_) {
+                if (_useCustom && !_saving) _save();
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '更改后，前台刷新、后台余额同步和账户操作都会使用该网址。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('保存'),
+        ),
+      ],
+    );
+  }
+
+  void _selectMode(bool useCustom) {
+    setState(() {
+      _useCustom = useCustom;
+      _errorText = null;
+    });
+  }
+
+  Future<void> _save() async {
+    final customBaseUrl = _useCustom ? _controller.text.trim() : null;
+    if (_useCustom && customBaseUrl!.isEmpty) {
+      setState(() => _errorText = '请输入自定义根网址。');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+    try {
+      await widget.onSave(customBaseUrl);
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst(RegExp(r'^(?:Format)?Exception:\s*'), '')
+          .trim();
+      setState(() {
+        _saving = false;
+        _errorText = message.isEmpty ? '保存失败，请检查网址。' : message;
+      });
+    }
   }
 }
 

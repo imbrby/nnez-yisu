@@ -23,7 +23,7 @@ class CanteenRepository {
     final storage = await LocalStorageService.create();
     final db = LocalDatabaseService();
     await db.init();
-    final apiClient = CampusApiClient();
+    final apiClient = CampusApiClient(baseUrl: storage.campusBaseUrl);
     final repo = CanteenRepository._(storage, db, apiClient);
     // Migrate legacy data
     await storage.migrateToPerUser();
@@ -41,6 +41,18 @@ class CanteenRepository {
 
   String? get balanceUpdatedAt =>
       _volatileBalanceUpdatedAt ?? _storage.balanceUpdatedAt;
+
+  bool get usesCustomCampusBaseUrl => _storage.usesCustomCampusBaseUrl;
+
+  String get campusBaseUrl => _storage.campusBaseUrl;
+
+  Future<void> updateCampusBaseUrl(String? customBaseUrl) async {
+    await _storage.saveCampusBaseUrl(customBaseUrl);
+    _apiClient.baseUrl = _storage.campusBaseUrl;
+    _logInfo(
+      'campus base URL updated mode=${customBaseUrl == null ? 'default' : 'custom'}',
+    );
+  }
 
   Future<void> initializeAccount({
     required String sid,

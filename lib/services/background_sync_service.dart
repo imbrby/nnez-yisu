@@ -1,6 +1,7 @@
 import 'package:home_widget/home_widget.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
+import 'package:nnez_yisu/services/local_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const backgroundSyncTaskName = 'com.brby.yisu.backgroundSync';
@@ -25,7 +26,12 @@ Future<bool> backgroundSyncCallback() async {
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
-    final client = CampusApiClient();
+    final customBaseUrl = prefs.getString(
+      LocalStorageService.campusBaseUrlPreferenceKey,
+    );
+    final client = CampusApiClient(
+      baseUrl: LocalStorageService.resolveCampusBaseUrl(customBaseUrl),
+    );
     final payload = await client.fetchAll(
       sid: sid,
       plainPassword: password,

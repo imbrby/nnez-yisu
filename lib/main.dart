@@ -14,6 +14,7 @@ import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:nnez_yisu/services/app_update_service.dart';
 import 'package:nnez_yisu/services/background_sync_service.dart';
 import 'package:nnez_yisu/services/canteen_repository.dart';
+import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:nnez_yisu/services/data_transfer_service.dart';
 import 'package:nnez_yisu/services/widget_service.dart';
 import 'package:workmanager/workmanager.dart';
@@ -263,6 +264,8 @@ class _AppShellState extends State<AppShell> {
     }
     _logInfo('开始刷新');
 
+    _statusClearTimer?.cancel();
+    var retry = false;
     setState(() {
       _syncing = true;
       _status = '正在刷新...';
@@ -298,9 +301,8 @@ class _AppShellState extends State<AppShell> {
     } catch (error, stackTrace) {
       _logError('刷新失败', error, stackTrace);
       if (!mounted) return;
-      setState(() {
-        _status = '刷新失败：${_formatError(error)}';
-      });
+      setState(() => _status = '');
+      retry = await _showSyncErrorDialog(_formatError(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -308,6 +310,37 @@ class _AppShellState extends State<AppShell> {
         });
       }
     }
+    if (retry && mounted) unawaited(_syncNow());
+  }
+
+  Future<bool> _showSyncErrorDialog(String message) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('刷新失败'),
+            content: SelectableText(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('关闭'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _updateCampusBaseUrl(String? customBaseUrl) async {
+    final repo = _repository;
+    if (repo == null) throw Exception('应用尚未初始化完成。');
+    await repo.updateCampusBaseUrl(customBaseUrl);
+    if (mounted) setState(() {});
   }
 
   Future<void> _setupAccount() async {
@@ -628,6 +661,9 @@ class _AppShellState extends State<AppShell> {
           onImport: _importData,
           onReportLoss: _reportLoss,
           onCancelLoss: _cancelLoss,
+          usesCustomBaseUrl: _repository?.usesCustomCampusBaseUrl ?? false,
+          campusBaseUrl: _repository?.campusBaseUrl ?? defaultCampusBaseUrl,
+          onBaseUrlChanged: _updateCampusBaseUrl,
           isBusy: _syncing || _settingUp,
         ),
       ],

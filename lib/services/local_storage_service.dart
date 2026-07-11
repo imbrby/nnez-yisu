@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:nnez_yisu/models/campus_profile.dart';
 import 'package:nnez_yisu/models/transaction_record.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalStorageService {
@@ -15,6 +16,7 @@ class LocalStorageService {
   static const _sidKey = 'campus_sid';
   static const _passwordKey = 'campus_password';
   static const _activeSidKey = 'active_sid';
+  static const campusBaseUrlPreferenceKey = 'campus_base_url';
 
   // Legacy flat keys (for migration only)
   static const _legacyProfileKey = 'campus_profile';
@@ -45,6 +47,35 @@ class LocalStorageService {
   String get campusPassword => _prefs.getString(_passwordKey) ?? '';
 
   String? get activeSid => _prefs.getString(_activeSidKey);
+
+  String? get customCampusBaseUrl {
+    final value = _prefs.getString(campusBaseUrlPreferenceKey)?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  bool get usesCustomCampusBaseUrl => customCampusBaseUrl != null;
+
+  String get campusBaseUrl => resolveCampusBaseUrl(customCampusBaseUrl);
+
+  static String resolveCampusBaseUrl(String? customBaseUrl) {
+    if (customBaseUrl == null || customBaseUrl.trim().isEmpty) {
+      return defaultCampusBaseUrl;
+    }
+    return CampusApiClient.normalizeBaseUrl(customBaseUrl);
+  }
+
+  Future<void> saveCampusBaseUrl(String? customBaseUrl) async {
+    final normalized = customBaseUrl == null
+        ? null
+        : CampusApiClient.normalizeBaseUrl(customBaseUrl);
+    await _enqueueWrite('saveCampusBaseUrl', () async {
+      if (normalized == null) {
+        await _prefs.remove(campusBaseUrlPreferenceKey);
+      } else {
+        await _prefs.setString(campusBaseUrlPreferenceKey, normalized);
+      }
+    });
+  }
 
   Future<void> setActiveSid(String? sid) async {
     await _enqueueWrite('setActiveSid', () async {

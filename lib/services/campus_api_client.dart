@@ -15,6 +15,7 @@ import 'package:nnez_yisu/services/app_log_service.dart';
 // ---------------------------------------------------------------------------
 
 typedef _FetchAllParams = ({
+  String baseUrl,
   String sid,
   String plainPassword,
   String startDate,
@@ -32,10 +33,12 @@ class _IsolateResult {
 // Top-level isolate entry point
 // ---------------------------------------------------------------------------
 
-const String _baseUrl = 'http://xfxt.nnedu.com:455';
+const String defaultCampusBaseUrl = 'http://xfxt.nnedu.com:455';
+String _baseUrl = defaultCampusBaseUrl;
 const Duration _stepTimeout = Duration(seconds: 18);
 
 Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
+  _baseUrl = params.baseUrl;
   final logs = <String>[];
   void logInfo(String msg) => logs.add('[INFO][API] $msg');
   void logError(String ctx, Object err, StackTrace st) {
@@ -210,6 +213,9 @@ Future<_IsolateResult> _fetchAllInIsolate(_FetchAllParams params) async {
   } on TimeoutException catch (err, st) {
     logError('fetchAll timeout', err, st);
     throw Exception('校园接口超时，请稍后重试。');
+  } on HandshakeException catch (err, st) {
+    logError('fetchAll TLS handshake error', err, st);
+    throw Exception('校园接口安全连接失败，请检查根网址的 HTTP/HTTPS 协议后重试。');
   } on SocketException catch (err, st) {
     logError('fetchAll socket error', err, st);
     throw Exception('网络连接失败，请检查网络后重试。');
@@ -472,7 +478,12 @@ String _extractMessage(Map<String, dynamic> payload) {
 // Card loss/unlock isolate entry points
 // ---------------------------------------------------------------------------
 
-typedef _CardOpParams = ({String sid, String plainPassword, String method});
+typedef _CardOpParams = ({
+  String baseUrl,
+  String sid,
+  String plainPassword,
+  String method,
+});
 
 class _CardOpResult {
   const _CardOpResult({required this.message, required this.logs});
@@ -481,6 +492,7 @@ class _CardOpResult {
 }
 
 Future<_CardOpResult> _cardOpInIsolate(_CardOpParams params) async {
+  _baseUrl = params.baseUrl;
   final logs = <String>[];
   void logInfo(String msg) => logs.add('[INFO][API] $msg');
   void logError(String ctx, Object err, StackTrace st) {
@@ -564,6 +576,9 @@ Future<_CardOpResult> _cardOpInIsolate(_CardOpParams params) async {
   } on TimeoutException catch (err, st) {
     logError('cardOp timeout', err, st);
     throw Exception('操作超时，请稍后重试。');
+  } on HandshakeException catch (err, st) {
+    logError('cardOp TLS handshake error', err, st);
+    throw Exception('校园接口安全连接失败，请检查根网址的 HTTP/HTTPS 协议后重试。');
   } on SocketException catch (err, st) {
     logError('cardOp socket error', err, st);
     throw Exception('网络连接失败，请检查网络后重试。');
@@ -580,6 +595,34 @@ Future<_CardOpResult> _cardOpInIsolate(_CardOpParams params) async {
 // ---------------------------------------------------------------------------
 
 class CampusApiClient {
+  CampusApiClient({String baseUrl = defaultCampusBaseUrl})
+    : _baseUrlValue = normalizeBaseUrl(baseUrl);
+
+  String _baseUrlValue;
+
+  String get baseUrl => _baseUrlValue;
+
+  set baseUrl(String value) {
+    _baseUrlValue = normalizeBaseUrl(value);
+  }
+
+  static String normalizeBaseUrl(String value) {
+    final trimmed = value.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        (uri.path.isNotEmpty && uri.path != '/')) {
+      throw const FormatException(
+        '请输入有效的 HTTP 或 HTTPS 根网址，例如 http://xfxt.nnedu.com:455。',
+      );
+    }
+    return uri.replace(path: '').toString();
+  }
+
   Future<CampusSyncPayload> fetchAll({
     required String sid,
     required String plainPassword,
@@ -593,6 +636,7 @@ class CampusApiClient {
       ' range=$startDate~$endDate',
     );
     final params = (
+      baseUrl: _baseUrlValue,
       sid: sid,
       plainPassword: plainPassword,
       startDate: startDate,
@@ -619,6 +663,7 @@ class CampusApiClient {
   }) async {
     _logInfo('reportLoss dispatching to isolate');
     final params = (
+      baseUrl: _baseUrlValue,
       sid: sid,
       plainPassword: plainPassword,
       method: 'ecardguashi',
@@ -642,6 +687,7 @@ class CampusApiClient {
   }) async {
     _logInfo('cancelLoss dispatching to isolate');
     final params = (
+      baseUrl: _baseUrlValue,
       sid: sid,
       plainPassword: plainPassword,
       method: 'ecardjiegua',
