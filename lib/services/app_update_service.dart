@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as path_util;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,6 +21,32 @@ String? get appUpdateRepositoryUrl {
 }
 
 enum UpdateDownloadChannel { mirror, github }
+
+enum UpdateDownloadPhase { idle, downloading, completed, failed }
+
+class UpdateDownloadState {
+  const UpdateDownloadState({
+    this.phase = UpdateDownloadPhase.idle,
+    this.fileName = '',
+    this.receivedBytes = 0,
+    this.totalBytes,
+    this.message = '',
+    this.savedLocation = '',
+  });
+
+  final UpdateDownloadPhase phase;
+  final String fileName;
+  final int receivedBytes;
+  final int? totalBytes;
+  final String message;
+  final String savedLocation;
+
+  double? get progress {
+    final total = totalBytes;
+    if (total == null || total <= 0) return null;
+    return (receivedBytes / total).clamp(0, 1);
+  }
+}
 
 class AppReleaseInfo {
   const AppReleaseInfo({
@@ -54,7 +82,7 @@ class UpdateCheckResult {
   final AppReleaseInfo? release;
 }
 
-class AppUpdateService {
+class AppUpdateService extends ChangeNotifier {
   AppUpdateService._();
 
   static final AppUpdateService instance = AppUpdateService._();
@@ -62,6 +90,18 @@ class AppUpdateService {
   static const _prefAutoCheck = 'app_auto_check_update_enabled';
   static const _prefSkipTag = 'app_update_skip_tag';
   static const _prefPendingApkFiles = 'app_update_pending_apk_files';
+  static const _downloadChannel = MethodChannel('com.brby.yisu/update');
+
+  UpdateDownloadState _downloadState = const UpdateDownloadState();
+  UpdateDownloadState get downloadState => _downloadState;
+
+  HttpClient? _activeDownloadClient;
+  AppReleaseInfo? _lastDownloadRelease;
+  UpdateDownloadChannel? _lastDownloadChannel;
+  String? _installerPath;
+  List<String> _currentPackageCleanupRefs = const <String>[];
+  bool _downloadRunning = false;
+  bool _cancelRequested = false;
 
   Future<void> cleanupPendingPackages() async {
     final prefs = await SharedPreferences.getInstance();
@@ -277,7 +317,6 @@ class AppUpdateService {
                     onPressed: () async {
                       if (ctx.mounted) Navigator.pop(ctx);
                       await downloadAndInstall(
-                        context: context,
                         release: release,
                         channel: UpdateDownloadChannel.mirror,
                       );
@@ -291,7 +330,6 @@ class AppUpdateService {
                     onPressed: () async {
                       if (ctx.mounted) Navigator.pop(ctx);
                       await downloadAndInstall(
-                        context: context,
                         release: release,
                         channel: UpdateDownloadChannel.github,
                       );
@@ -308,78 +346,239 @@ class AppUpdateService {
   }
 
   Future<void> downloadAndInstall({
-    required BuildContext context,
     required AppReleaseInfo release,
     required UpdateDownloadChannel channel,
   }) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    void showMessage(String text) {
-      messenger?.showSnackBar(SnackBar(content: Text(text)));
-    }
+    if (_downloadRunning) return;
 
     final sourceUrl = channel == UpdateDownloadChannel.mirror
         ? release.mirrorDownloadUrl
         : release.downloadUrl;
 
     if (sourceUrl == null || sourceUrl.isEmpty) {
-      showMessage('当前平台未找到安装包，已打开发布页');
+      _setDownloadState(
+        UpdateDownloadState(
+          phase: UpdateDownloadPhase.failed,
+          fileName: release.fileName,
+          message: '当前平台没有可直接下载的安装包，请前往发布页。',
+        ),
+      );
       await _openReleasePage(release, channel);
       return;
     }
 
-    final targetDir = await _resolveDownloadDirectory();
-    final fileName = release.fileName.isEmpty
-        ? _defaultFileNameForCurrentPlatform()
-        : release.fileName;
-    final filePath = '${targetDir.path}/$fileName';
-    final file = File(filePath);
+    final fileName = _safeFileName(
+      release.fileName.isEmpty
+          ? _defaultFileNameForCurrentPlatform()
+          : release.fileName,
+    );
+    await _cleanupCurrentPackage();
+    _lastDownloadRelease = release;
+    _lastDownloadChannel = channel;
+    _downloadRunning = true;
+    _cancelRequested = false;
+    _installerPath = null;
+    File? partialFile;
+    IOSink? sink;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
+    _activeDownloadClient = client;
+    _setDownloadState(
+      UpdateDownloadState(
+        phase: UpdateDownloadPhase.downloading,
+        fileName: fileName,
+        message: channel == UpdateDownloadChannel.mirror
+            ? '正在通过镜像下载'
+            : '正在从 GitHub 下载',
+      ),
+    );
 
-    showMessage('正在下载更新包...');
-    final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(sourceUrl));
       request.headers.set('User-Agent', 'nnez-yisu');
       final response = await request.close().timeout(
-        const Duration(minutes: 3),
+        const Duration(seconds: 30),
       );
       if (response.statusCode != 200) {
         throw Exception('下载失败 (${response.statusCode})');
       }
-      final sink = file.openWrite();
-      await response.forEach(sink.add);
+      final totalBytes = response.contentLength > 0
+          ? response.contentLength
+          : null;
+      partialFile = await _createPartialDownloadFile(fileName);
+      sink = partialFile.openWrite();
+      var receivedBytes = 0;
+      var lastReportedAt = DateTime.fromMillisecondsSinceEpoch(0);
+      await for (final chunk in response.timeout(const Duration(seconds: 30))) {
+        if (_cancelRequested) throw const _DownloadCancelled();
+        sink.add(chunk);
+        receivedBytes += chunk.length;
+        final now = DateTime.now();
+        if (now.difference(lastReportedAt) >=
+                const Duration(milliseconds: 120) ||
+            receivedBytes == totalBytes) {
+          lastReportedAt = now;
+          _setDownloadState(
+            UpdateDownloadState(
+              phase: UpdateDownloadPhase.downloading,
+              fileName: fileName,
+              receivedBytes: receivedBytes,
+              totalBytes: totalBytes,
+              message: channel == UpdateDownloadChannel.mirror
+                  ? '正在通过镜像下载'
+                  : '正在从 GitHub 下载',
+            ),
+          );
+        }
+      }
+      await sink.flush();
       await sink.close();
+      sink = null;
+
+      final finalized = await _finalizeDownload(
+        partialFile: partialFile,
+        fileName: fileName,
+      );
 
       if (Platform.isAndroid) {
-        final openResult = await OpenFilex.open(
-          filePath,
-          type: 'application/vnd.android.package-archive',
-        );
-        if (openResult.type != ResultType.done) {
-          throw Exception('无法打开安装器: ${openResult.message}');
-        }
-        await _addPendingPackagePath(filePath);
-        unawaited(_deletePackageWhenPossible(filePath));
-        showMessage('已下载完成，正在打开安装器');
-        return;
+        _installerPath = partialFile.path;
+      } else {
+        _installerPath = finalized.installerPath;
+      }
+      _currentPackageCleanupRefs = <String>{
+        partialFile.path,
+        finalized.cleanupReference,
+      }.where((value) => value.isNotEmpty).toList();
+      for (final reference in _currentPackageCleanupRefs) {
+        await _addPendingPackagePath(reference);
       }
 
-      final openResult = await OpenFilex.open(filePath);
-      if (openResult.type == ResultType.done) {
-        showMessage('已下载完成');
-      } else {
-        showMessage('已下载到：$filePath');
-      }
+      _setDownloadState(
+        UpdateDownloadState(
+          phase: UpdateDownloadPhase.completed,
+          fileName: fileName,
+          receivedBytes: receivedBytes,
+          totalBytes: totalBytes ?? receivedBytes,
+          message: '下载完成，可以安装新版本',
+          savedLocation: Platform.isAndroid
+              ? finalized.displayLocation
+              : _displayDownloadLocation(finalized.displayLocation),
+        ),
+      );
+    } on _DownloadCancelled {
+      await _deleteIfExists(partialFile);
+      _setDownloadState(const UpdateDownloadState());
     } catch (error, stackTrace) {
+      await _deleteIfExists(partialFile);
       AppLogService.instance.error(
         'downloadAndInstall failed',
         tag: 'UPDATE',
         error: error,
         stackTrace: stackTrace,
       );
-      showMessage('更新失败：${_toUserMessage(error)}');
+      if (_cancelRequested) {
+        _setDownloadState(const UpdateDownloadState());
+      } else {
+        _setDownloadState(
+          UpdateDownloadState(
+            phase: UpdateDownloadPhase.failed,
+            fileName: fileName,
+            message: _toUserMessage(error),
+          ),
+        );
+      }
     } finally {
+      try {
+        await sink?.close();
+      } catch (_) {}
       client.close(force: true);
+      _activeDownloadClient = null;
+      _downloadRunning = false;
     }
+  }
+
+  Future<void> retryDownload() async {
+    final release = _lastDownloadRelease;
+    final channel = _lastDownloadChannel;
+    if (release == null || channel == null || _downloadRunning) return;
+    await downloadAndInstall(release: release, channel: channel);
+  }
+
+  void cancelDownload() {
+    if (!_downloadRunning) return;
+    _cancelRequested = true;
+    _activeDownloadClient?.close(force: true);
+  }
+
+  void dismissDownloadBanner() {
+    if (_downloadRunning) return;
+    _setDownloadState(const UpdateDownloadState());
+  }
+
+  Future<void> installDownloadedPackage() async {
+    final installerPath = _installerPath;
+    if (installerPath == null || installerPath.isEmpty) {
+      _setDownloadState(
+        UpdateDownloadState(
+          phase: UpdateDownloadPhase.failed,
+          fileName: _downloadState.fileName,
+          message: '安装包已不存在，请重新下载。',
+        ),
+      );
+      return;
+    }
+    final file = File(installerPath);
+    if (!await file.exists()) {
+      _installerPath = null;
+      _setDownloadState(
+        UpdateDownloadState(
+          phase: UpdateDownloadPhase.failed,
+          fileName: _downloadState.fileName,
+          message: '安装包已不存在，请重新下载。',
+        ),
+      );
+      return;
+    }
+
+    final openResult = Platform.isAndroid
+        ? await OpenFilex.open(
+            installerPath,
+            type: 'application/vnd.android.package-archive',
+          )
+        : await OpenFilex.open(installerPath);
+    if (openResult.type != ResultType.done) {
+      _setDownloadState(
+        UpdateDownloadState(
+          phase: UpdateDownloadPhase.completed,
+          fileName: _downloadState.fileName,
+          receivedBytes: _downloadState.receivedBytes,
+          totalBytes: _downloadState.totalBytes,
+          savedLocation: _downloadState.savedLocation,
+          message: '无法打开安装程序：${openResult.message}',
+        ),
+      );
+      return;
+    }
+    unawaited(
+      _deletePackagesWhenPossible(
+        List<String>.from(_currentPackageCleanupRefs),
+      ),
+    );
+  }
+
+  void _setDownloadState(UpdateDownloadState state) {
+    _downloadState = state;
+    notifyListeners();
+  }
+
+  Future<void> _cleanupCurrentPackage() async {
+    for (final reference in _currentPackageCleanupRefs) {
+      if (await _deletePackageFile(reference)) {
+        await _removePendingPackagePath(reference);
+      }
+    }
+    _currentPackageCleanupRefs = const <String>[];
+    _installerPath = null;
   }
 
   Future<void> _openReleasePage(
@@ -394,13 +593,78 @@ class AppUpdateService {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Future<Directory> _resolveDownloadDirectory() async {
+  Future<File> _createPartialDownloadFile(String fileName) async {
+    final Directory directory;
     if (Platform.isAndroid || Platform.isIOS) {
-      return getTemporaryDirectory();
+      directory = await getTemporaryDirectory();
+    } else {
+      directory = await _resolveDesktopDownloadDirectory();
     }
+    await directory.create(recursive: true);
+    final file = File(path_util.join(directory.path, '.$fileName.download'));
+    await _deleteIfExists(file);
+    return file;
+  }
+
+  Future<_FinalizedDownload> _finalizeDownload({
+    required File partialFile,
+    required String fileName,
+  }) async {
+    if (Platform.isAndroid) {
+      final raw = await _downloadChannel.invokeMapMethod<String, dynamic>(
+        'saveToDownloads',
+        <String, dynamic>{
+          'sourcePath': partialFile.path,
+          'fileName': fileName,
+          'mimeType': 'application/vnd.android.package-archive',
+        },
+      );
+      final location = raw?['location']?.toString() ?? 'Download/$fileName';
+      final cleanupReference =
+          raw?['uri']?.toString() ?? raw?['path']?.toString() ?? '';
+      if (cleanupReference.isEmpty) {
+        throw Exception('安装包已下载，但无法确认 Download 保存位置。');
+      }
+      return _FinalizedDownload(
+        installerPath: partialFile.path,
+        displayLocation: location,
+        cleanupReference: cleanupReference,
+      );
+    }
+
+    final downloadDirectory = await _resolveDesktopDownloadDirectory();
+    final targetFile = File(path_util.join(downloadDirectory.path, fileName));
+    await _deleteIfExists(targetFile);
+    final savedFile = await partialFile.rename(targetFile.path);
+    return _FinalizedDownload(
+      installerPath: savedFile.path,
+      displayLocation: savedFile.path,
+      cleanupReference: savedFile.path,
+    );
+  }
+
+  Future<Directory> _resolveDesktopDownloadDirectory() async {
     final downloads = await getDownloadsDirectory();
     if (downloads != null) return downloads;
     return getApplicationSupportDirectory();
+  }
+
+  static String _safeFileName(String raw) {
+    final name = path_util.basename(raw.trim());
+    return name.isEmpty ? _defaultFileNameForCurrentPlatform() : name;
+  }
+
+  static String _displayDownloadLocation(String path) {
+    if (path.isEmpty) return '';
+    final fileName = path_util.basename(path);
+    return fileName.isEmpty ? path : 'Download/$fileName';
+  }
+
+  static Future<void> _deleteIfExists(File? file) async {
+    if (file == null) return;
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
   }
 
   static String _defaultFileNameForCurrentPlatform() {
@@ -524,16 +788,25 @@ class AppUpdateService {
     }
   }
 
-  Future<void> _deletePackageWhenPossible(String path) async {
+  Future<void> _deletePackagesWhenPossible(List<String> references) async {
     await Future<void>.delayed(const Duration(minutes: 2));
-    final deleted = await _deletePackageFile(path);
-    if (deleted) {
-      await _removePendingPackagePath(path);
+    for (final reference in references) {
+      final deleted = await _deletePackageFile(reference);
+      if (deleted) {
+        await _removePendingPackagePath(reference);
+      }
     }
   }
 
   Future<bool> _deletePackageFile(String path) async {
     try {
+      if (Platform.isAndroid && path.startsWith('content://')) {
+        return await _downloadChannel.invokeMethod<bool>(
+              'deleteDownload',
+              <String, dynamic>{'uri': path},
+            ) ??
+            false;
+      }
       final file = File(path);
       if (!await file.exists()) return true;
       await file.delete();
@@ -542,6 +815,227 @@ class AppUpdateService {
       return false;
     }
   }
+}
+
+class UpdateDownloadBanner extends StatelessWidget {
+  const UpdateDownloadBanner({super.key, required this.service});
+
+  final AppUpdateService service;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: service,
+      builder: (context, _) {
+        final state = service.downloadState;
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, -0.12),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: state.phase == UpdateDownloadPhase.idle
+              ? const SizedBox.shrink(key: ValueKey('update-idle'))
+              : SafeArea(
+                  key: ValueKey(state.phase),
+                  minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: _UpdateDownloadBannerCard(
+                        state: state,
+                        service: service,
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _UpdateDownloadBannerCard extends StatelessWidget {
+  const _UpdateDownloadBannerCard({required this.state, required this.service});
+
+  final UpdateDownloadState state;
+  final AppUpdateService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDownloading = state.phase == UpdateDownloadPhase.downloading;
+    final isCompleted = state.phase == UpdateDownloadPhase.completed;
+    final icon = isDownloading
+        ? Icons.downloading_rounded
+        : isCompleted
+        ? Icons.inventory_2_outlined
+        : Icons.cloud_off_outlined;
+    final title = isDownloading
+        ? '正在下载 ${state.fileName}'
+        : isCompleted
+        ? '安装包已就绪'
+        : '下载没有完成';
+
+    return Semantics(
+      liveRegion: true,
+      label: '$title，${state.message}',
+      child: Material(
+        elevation: 8,
+        shadowColor: colorScheme.shadow.withValues(alpha: 0.18),
+        color: const Color(0xFFFFFCF5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isCompleted
+                      ? const Color(0xFFE2F0E9)
+                      : const Color(0xFFF3E8C8),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: isCompleted
+                      ? colorScheme.primary
+                      : const Color(0xFF8A651A),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      state.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (isDownloading) ...[
+                      const SizedBox(height: 10),
+                      LinearProgressIndicator(
+                        value: state.progress,
+                        minHeight: 5,
+                        borderRadius: BorderRadius.circular(99),
+                        backgroundColor: const Color(0xFFE8E2D5),
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _progressLabel(state),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (isCompleted && state.savedLocation.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        '已保存到 ${state.savedLocation}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isDownloading)
+                TextButton(
+                  onPressed: service.cancelDownload,
+                  child: const Text('取消'),
+                )
+              else ...[
+                if (isCompleted)
+                  FilledButton.icon(
+                    onPressed: service.installDownloadedPackage,
+                    icon: const Icon(Icons.install_mobile_outlined, size: 18),
+                    label: const Text('安装'),
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: service.retryDownload,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('重试'),
+                  ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: service.dismissDownloadBanner,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _progressLabel(UpdateDownloadState state) {
+    final received = _formatBytes(state.receivedBytes);
+    final total = state.totalBytes;
+    if (total == null || total <= 0) return '已下载 $received';
+    final percent = ((state.progress ?? 0) * 100).round();
+    return '$received / ${_formatBytes(total)} · $percent%';
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(1)} MB';
+  }
+}
+
+class _FinalizedDownload {
+  const _FinalizedDownload({
+    required this.installerPath,
+    required this.displayLocation,
+    required this.cleanupReference,
+  });
+
+  final String installerPath;
+  final String displayLocation;
+  final String cleanupReference;
+}
+
+class _DownloadCancelled implements Exception {
+  const _DownloadCancelled();
 }
 
 class _ReleaseAsset {

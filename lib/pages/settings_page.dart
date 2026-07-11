@@ -3,6 +3,7 @@ import 'package:nnez_yisu/models/campus_profile.dart';
 import 'package:nnez_yisu/pages/about_page.dart';
 import 'package:nnez_yisu/pages/account_operation_page.dart';
 import 'package:nnez_yisu/pages/data_management_page.dart';
+import 'package:nnez_yisu/pages/widget_settings_page.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -183,6 +184,16 @@ class SettingsPage extends StatelessWidget {
                   children: [
                     ListTile(
                       leading: Icon(
+                        Icons.widgets_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('桌面小组件'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _pushWidgetSettings(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: Icon(
                         Icons.credit_card_outlined,
                         color: colorScheme.primary,
                       ),
@@ -197,11 +208,6 @@ class SettingsPage extends StatelessWidget {
                         color: colorScheme.primary,
                       ),
                       title: const Text('校园接口根网址'),
-                      subtitle: Text(
-                        '${usesCustomBaseUrl ? '自定义' : '默认'} · $campusBaseUrl',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: isBusy
                           ? null
@@ -316,6 +322,13 @@ class SettingsPage extends StatelessWidget {
           isBusy: isBusy,
         ),
       ),
+    );
+  }
+
+  void _pushWidgetSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const WidgetSettingsPage()),
     );
   }
 

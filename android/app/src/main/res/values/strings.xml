@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_description">显示校园卡余额</string>
+    <string name="widget_description">一粟余额简卡</string>
+    <string name="widget_overview_description">一粟消费概览</string>
+    <string name="widget_endurance_description">一粟余额续航</string>
 </resources>

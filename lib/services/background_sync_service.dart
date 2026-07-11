@@ -1,7 +1,7 @@
-import 'package:home_widget/home_widget.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:nnez_yisu/services/local_storage_service.dart';
+import 'package:nnez_yisu/services/widget_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const backgroundSyncTaskName = 'com.brby.yisu.backgroundSync';
@@ -40,12 +40,12 @@ Future<bool> backgroundSyncCallback() async {
       includeTransactions: false,
     );
 
-    // Update widget data
-    await HomeWidget.saveWidgetData(
-      'widget_balance',
-      payload.balance.toStringAsFixed(2),
+    // Update all home screen widgets while preserving richer foreground data.
+    await WidgetService.updateWidget(
+      balance: payload.balance,
+      studentName: payload.profile.studentName,
+      updatedAt: payload.balanceUpdatedAt,
     );
-    await HomeWidget.updateWidget(androidName: 'CanteenWidgetProvider');
 
     // Update balance in SharedPreferences
     await prefs.setDouble('user_${sid}_balance', payload.balance);

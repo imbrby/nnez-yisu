@@ -210,6 +210,7 @@ class _AppShellState extends State<AppShell> {
       _recentRecharges = await repo.loadRecentRecharges();
       // Calculate estimated days
       _estimatedDays = _calcEstimatedDays(repo.balance, saved);
+      _updateHomeWidgets(repo, saved);
       _logInfo('bootstrap 完成，hasCredential=${repo.hasCredential}');
       // Auto-sync if not synced today
       if (repo.hasCredential) {
@@ -288,8 +289,8 @@ class _AppShellState extends State<AppShell> {
       _recentRecharges = await repo.loadRecentRecharges();
       // Calculate estimated days
       _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
-      // Update home screen widget
-      WidgetService.updateWidget(balance: repo.balance ?? 0);
+      // Update home screen widgets
+      _updateHomeWidgets(repo, fresh);
       setState(() {
         _status = '刷新成功';
       });
@@ -473,6 +474,7 @@ class _AppShellState extends State<AppShell> {
       _profile = repo.profile;
       _recentRecharges = await repo.loadRecentRecharges();
       _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
+      _updateHomeWidgets(repo, fresh);
       setState(() => _status = '导入完成，共 $count 条记录');
       _statusClearTimer?.cancel();
       _statusClearTimer = Timer(const Duration(seconds: 3), () {
@@ -518,6 +520,28 @@ class _AppShellState extends State<AppShell> {
     final avgPerActiveDay = totalSpent / dailyTotals.length;
     if (avgPerActiveDay <= 0) return null;
     return (balance / avgPerActiveDay).floor();
+  }
+
+  void _updateHomeWidgets(
+    CanteenRepository repo,
+    Map<String, List<TransactionRecord>> transactionsByMonth,
+  ) {
+    final todayTransactions = transactionsByMonth[_currentMonthKey()] ?? [];
+    final today = _currentDayKey();
+    final todaySpend = todayTransactions
+        .where((transaction) => transaction.occurredDay == today)
+        .fold<double>(0, (sum, transaction) => sum + transaction.amount.abs());
+    final updatedAt = DateTime.tryParse(repo.balanceUpdatedAt ?? '');
+    unawaited(
+      WidgetService.updateWidget(
+        balance: repo.balance ?? 0,
+        todaySpend: todaySpend,
+        estimatedDays: _estimatedDays,
+        replaceEstimatedDays: true,
+        studentName: repo.profile?.studentName,
+        updatedAt: updatedAt,
+      ),
+    );
   }
 
   String _formatError(Object error) {
@@ -850,6 +874,12 @@ class _AppShellState extends State<AppShell> {
               ),
             ),
           ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: UpdateDownloadBanner(service: AppUpdateService.instance),
+        ),
       ],
     );
   }
