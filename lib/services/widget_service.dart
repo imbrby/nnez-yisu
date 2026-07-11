@@ -62,6 +62,10 @@ class WidgetService {
   static Future<void> updateWidget({
     required double balance,
     double? todaySpend,
+    double? monthExpense,
+    double? monthRecharge,
+    int? monthRecordCount,
+    String? monthLabel,
     int? estimatedDays,
     bool replaceEstimatedDays = false,
     String? studentName,
@@ -77,6 +81,27 @@ class WidgetService {
           'widget_today_spend',
           todaySpend.toStringAsFixed(2),
         );
+      }
+      if (monthExpense != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_month_expense',
+          monthExpense.toStringAsFixed(2),
+        );
+      }
+      if (monthRecharge != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_month_recharge',
+          monthRecharge.toStringAsFixed(2),
+        );
+      }
+      if (monthRecordCount != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_month_record_count',
+          monthRecordCount,
+        );
+      }
+      if (monthLabel != null) {
+        await HomeWidget.saveWidgetData('widget_month_label', monthLabel);
       }
       if (estimatedDays != null) {
         await HomeWidget.saveWidgetData('widget_estimated_days', estimatedDays);

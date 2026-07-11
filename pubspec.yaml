@@ -1,7 +1,7 @@
 name: nnez_yisu
 description: A Flutter canteen card assistant for NNEZ.
 publish_to: 'none'
-version: 2.2.0+202607111
+version: 2.2.0+202607112
 
 environment:
   sdk: ^3.10.8

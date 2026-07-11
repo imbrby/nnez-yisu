@@ -531,11 +531,27 @@ class _AppShellState extends State<AppShell> {
     final todaySpend = todayTransactions
         .where((transaction) => transaction.occurredDay == today)
         .fold<double>(0, (sum, transaction) => sum + transaction.amount.abs());
+    final currentMonthKey = _currentMonthKey();
+    final monthTransactions = transactionsByMonth[currentMonthKey] ?? [];
+    final monthRecharges = _rechargesByMonth[currentMonthKey] ?? [];
+    final monthExpense = monthTransactions.fold<double>(
+      0,
+      (sum, transaction) => sum + transaction.amount.abs(),
+    );
+    final monthRecharge = monthRecharges.fold<double>(
+      0,
+      (sum, recharge) => sum + recharge.amount.abs(),
+    );
+    final now = DateTime.now();
     final updatedAt = DateTime.tryParse(repo.balanceUpdatedAt ?? '');
     unawaited(
       WidgetService.updateWidget(
         balance: repo.balance ?? 0,
         todaySpend: todaySpend,
+        monthExpense: monthExpense,
+        monthRecharge: monthRecharge,
+        monthRecordCount: monthTransactions.length + monthRecharges.length,
+        monthLabel: '${now.year}年${now.month}月记录',
         estimatedDays: _estimatedDays,
         replaceEstimatedDays: true,
         studentName: repo.profile?.studentName,

@@ -4,12 +4,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
-    android:gravity="center_vertical"
     android:orientation="vertical"
-    android:paddingStart="16dp"
-    android:paddingTop="11dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="11dp">
+    android:paddingStart="14dp"
+    android:paddingTop="9dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="9dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -23,28 +22,70 @@
             android:layout_height="wrap_content"
             android:text="●"
             android:textColor="#FFC99B3C"
-            android:textSize="8sp" />
+            android:textSize="7sp" />
 
         <TextView
-            android:id="@+id/tv_balance_label"
+            android:id="@+id/tv_student_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="一粟 · 校园卡"
+            android:textColor="#FF557069"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/tv_updated_at"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="7dp"
-            android:text="校园卡余额"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="等待同步"
             android:textColor="#FF557069"
-            android:textSize="11sp" />
+            android:textSize="9sp" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/tv_balance"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:ellipsize="end"
-        android:fontFamily="sans-serif-medium"
+        android:fontFamily="sans-serif"
+        android:gravity="center_vertical"
         android:maxLines="1"
         android:text="¥ --"
         android:textColor="#FF174F43"
-        android:textSize="25sp" />
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/today_spend_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tv_today_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="今日消费"
+            android:textColor="#FF557069"
+            android:textSize="9sp" />
+
+        <TextView
+            android:id="@+id/tv_today_spend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:fontFamily="sans-serif"
+            android:text="¥ 0.00"
+            android:textColor="#FF174F43"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
 </LinearLayout>

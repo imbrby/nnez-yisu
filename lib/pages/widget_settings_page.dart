@@ -106,7 +106,7 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
                           preferences.copyWith(showTodaySpend: value),
                         ),
                   title: const Text('显示今日消费'),
-                  subtitle: const Text('影响消费概览小组件'),
+                  subtitle: const Text('影响常用的余额简卡'),
                 ),
                 const SizedBox(height: 28),
                 Row(
@@ -132,14 +132,14 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
                 const SizedBox(height: 10),
                 _WidgetKindRow(
                   title: '余额简卡',
-                  description: '2 × 1 · 一眼查看校园卡余额',
+                  description: '2 × 1 · 姓名、余额、今日消费与更新时间',
                   icon: Icons.account_balance_wallet_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.balance),
                 ),
                 const Divider(height: 1),
                 _WidgetKindRow(
                   title: '消费概览',
-                  description: '4 × 2 · 余额、今日消费与更新时间',
+                  description: '4 × 2 · 本月充值、消费与记录数',
                   icon: Icons.receipt_long_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.overview),
                 ),
