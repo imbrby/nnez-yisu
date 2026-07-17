@@ -11,6 +11,7 @@ import 'package:nnez_yisu/pages/detail_page.dart';
 import 'package:nnez_yisu/pages/home_page.dart';
 import 'package:nnez_yisu/pages/settings_page.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/app_theme_service.dart';
 import 'package:nnez_yisu/services/app_update_service.dart';
 import 'package:nnez_yisu/services/background_sync_service.dart';
 import 'package:nnez_yisu/services/canteen_repository.dart';
@@ -32,6 +33,7 @@ void _workmanagerCallbackDispatcher() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppThemeService.instance.init();
   try {
     await AppLogService.instance.init();
     AppLogService.instance.info('应用启动', tag: 'BOOT');
@@ -100,39 +102,15 @@ class CanteenApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF1F6F5B),
-      brightness: Brightness.light,
-    );
-    final isWindowsDesktop =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-    const windowsFontFamily = 'Microsoft YaHei';
-    const windowsFontFallback = <String>[
-      'Microsoft YaHei UI',
-      'Segoe UI',
-      'PingFang SC',
-      'Noto Sans CJK SC',
-      'sans-serif',
-    ];
-    final appTheme = ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFFF5F0E6),
-      appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
-        elevation: 0,
+    final themeService = AppThemeService.instance;
+    return AnimatedBuilder(
+      animation: themeService,
+      builder: (context, _) => MaterialApp(
+        title: '一粟',
+        debugShowCheckedModeBanner: false,
+        theme: themeService.buildTheme(),
+        home: const AppShell(),
       ),
-      cardTheme: const CardThemeData(margin: EdgeInsets.zero),
-      fontFamily: isWindowsDesktop ? windowsFontFamily : null,
-      fontFamilyFallback: isWindowsDesktop ? windowsFontFallback : null,
-    );
-
-    return MaterialApp(
-      title: '一粟',
-      debugShowCheckedModeBanner: false,
-      theme: appTheme,
-      home: const AppShell(),
     );
   }
 }
@@ -526,34 +504,13 @@ class _AppShellState extends State<AppShell> {
     CanteenRepository repo,
     Map<String, List<TransactionRecord>> transactionsByMonth,
   ) {
-    final todayTransactions = transactionsByMonth[_currentMonthKey()] ?? [];
-    final today = _currentDayKey();
-    final todaySpend = todayTransactions
-        .where((transaction) => transaction.occurredDay == today)
-        .fold<double>(0, (sum, transaction) => sum + transaction.amount.abs());
-    final currentMonthKey = _currentMonthKey();
-    final monthTransactions = transactionsByMonth[currentMonthKey] ?? [];
-    final monthRecharges = _rechargesByMonth[currentMonthKey] ?? [];
-    final monthExpense = monthTransactions.fold<double>(
-      0,
-      (sum, transaction) => sum + transaction.amount.abs(),
-    );
-    final monthRecharge = monthRecharges.fold<double>(
-      0,
-      (sum, recharge) => sum + recharge.amount.abs(),
-    );
-    final now = DateTime.now();
     final updatedAt = DateTime.tryParse(repo.balanceUpdatedAt ?? '');
     unawaited(
-      WidgetService.updateWidget(
+      WidgetService.updateFromData(
         balance: repo.balance ?? 0,
-        todaySpend: todaySpend,
-        monthExpense: monthExpense,
-        monthRecharge: monthRecharge,
-        monthRecordCount: monthTransactions.length + monthRecharges.length,
-        monthLabel: '${now.year}年${now.month}月记录',
+        transactionsByMonth: transactionsByMonth,
+        rechargesByMonth: _rechargesByMonth,
         estimatedDays: _estimatedDays,
-        replaceEstimatedDays: true,
         studentName: repo.profile?.studentName,
         updatedAt: updatedAt,
       ),

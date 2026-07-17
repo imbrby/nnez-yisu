@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nnez_yisu/models/campus_profile.dart';
 import 'package:nnez_yisu/pages/about_page.dart';
 import 'package:nnez_yisu/pages/account_operation_page.dart';
+import 'package:nnez_yisu/pages/app_theme_settings_page.dart';
 import 'package:nnez_yisu/pages/data_management_page.dart';
 import 'package:nnez_yisu/pages/widget_settings_page.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
@@ -184,6 +185,16 @@ class SettingsPage extends StatelessWidget {
                   children: [
                     ListTile(
                       leading: Icon(
+                        Icons.palette_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: const Text('应用主题'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _pushAppThemeSettings(context),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: Icon(
                         Icons.widgets_outlined,
                         color: colorScheme.primary,
                       ),
@@ -332,6 +343,13 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
+  void _pushAppThemeSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AppThemeSettingsPage()),
+    );
+  }
+
   Future<void> _showCampusBaseUrlDialog(BuildContext context) {
     return showDialog<void>(
       context: context,
@@ -439,7 +457,7 @@ class _CampusBaseUrlDialogState extends State<_CampusBaseUrlDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              '更改后，前台刷新、后台余额同步和账户操作都会使用该网址。',
+              '更改后，前台刷新、后台数据同步和账户操作都会使用该网址。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nnez_yisu/core/expense_classifier.dart';
+import 'package:nnez_yisu/core/expense_visual_style.dart';
 import 'package:nnez_yisu/core/time_utils.dart';
 import 'package:nnez_yisu/models/recharge_record.dart';
 import 'package:nnez_yisu/models/transaction_record.dart';
@@ -484,7 +485,11 @@ class _DetailRecordTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final visualStyle = _recordVisualStyle(record, colorScheme);
+    final visualStyle = ExpenseVisualStyles.resolve(
+      colorScheme: colorScheme,
+      category: record.expense?.category,
+      isRecharge: record.isRecharge,
+    );
     final time = record.occurredAt.length >= 16
         ? record.occurredAt.substring(11, 16)
         : '';
@@ -546,58 +551,6 @@ class _DetailRecordTile extends StatelessWidget {
       ),
     );
   }
-
-  _RecordVisualStyle _recordVisualStyle(
-    _DetailRecord detailRecord,
-    ColorScheme colorScheme,
-  ) {
-    if (detailRecord.isRecharge) {
-      return _RecordVisualStyle(
-        icon: Icons.add_circle_outline,
-        backgroundColor: colorScheme.tertiaryContainer,
-        iconColor: colorScheme.onTertiaryContainer,
-      );
-    }
-    switch (detailRecord.expense?.category) {
-      case ExpenseCategory.meal:
-        return _RecordVisualStyle(
-          icon: Icons.restaurant_menu_outlined,
-          backgroundColor: colorScheme.primaryContainer,
-          iconColor: colorScheme.onPrimaryContainer,
-        );
-      case ExpenseCategory.drink:
-        return _RecordVisualStyle(
-          icon: Icons.local_cafe_outlined,
-          backgroundColor: colorScheme.tertiaryContainer,
-          iconColor: colorScheme.onTertiaryContainer,
-        );
-      case ExpenseCategory.snack:
-        return _RecordVisualStyle(
-          icon: Icons.icecream_outlined,
-          backgroundColor: colorScheme.secondaryContainer,
-          iconColor: colorScheme.onSecondaryContainer,
-        );
-      case ExpenseCategory.unknown:
-      case null:
-        return _RecordVisualStyle(
-          icon: Icons.receipt_long_outlined,
-          backgroundColor: colorScheme.surfaceContainerHighest,
-          iconColor: colorScheme.onSurfaceVariant,
-        );
-    }
-  }
-}
-
-class _RecordVisualStyle {
-  const _RecordVisualStyle({
-    required this.icon,
-    required this.backgroundColor,
-    required this.iconColor,
-  });
-
-  final IconData icon;
-  final Color backgroundColor;
-  final Color iconColor;
 }
 
 class _MonthlyCategorySummary extends StatelessWidget {

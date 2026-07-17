@@ -132,22 +132,22 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
                 const SizedBox(height: 10),
                 _WidgetKindRow(
                   title: '余额简卡',
-                  description: '2 × 1 · 姓名、余额、今日消费与更新时间',
+                  description: '2 × 1 · 姓名、余额、今日消费与预计天数',
                   icon: Icons.account_balance_wallet_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.balance),
                 ),
                 const Divider(height: 1),
                 _WidgetKindRow(
-                  title: '消费概览',
-                  description: '4 × 2 · 本月充值、消费与记录数',
+                  title: '消费统计',
+                  description: '4 × 2 起 · 统计与最近余额变动，可纵向拉伸',
                   icon: Icons.receipt_long_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.overview),
                 ),
                 const Divider(height: 1),
                 _WidgetKindRow(
-                  title: '余额续航',
-                  description: '2 × 2 · 预计可用天数与当前余额',
-                  icon: Icons.energy_savings_leaf_outlined,
+                  title: '地点分类',
+                  description: '2 × 2 · 正餐、饮品和小吃消费',
+                  icon: Icons.category_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.endurance),
                 ),
               ],
@@ -219,8 +219,8 @@ class _OverviewPreview extends StatelessWidget {
               Expanded(
                 child: Text(
                   preferences.showStudentName && snapshot.studentName.isNotEmpty
-                      ? '${snapshot.studentName}的校园卡'
-                      : '一粟 · 校园卡',
+                      ? snapshot.studentName
+                      : '校园卡',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -246,11 +246,11 @@ class _OverviewPreview extends StatelessWidget {
               letterSpacing: -0.8,
             ),
           ),
-          if (preferences.showTodaySpend) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('今日消费', style: TextStyle(color: palette.muted)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (preferences.showTodaySpend) ...[
+                Text('今日', style: TextStyle(color: palette.muted)),
                 const SizedBox(width: 8),
                 Text(
                   '¥ ${snapshot.todaySpend}',
@@ -260,8 +260,20 @@ class _OverviewPreview extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ],
+              const Spacer(),
+              Text('预计', style: TextStyle(color: palette.muted)),
+              const SizedBox(width: 8),
+              Text(
+                snapshot.estimatedDays == null
+                    ? '-- 天'
+                    : '${snapshot.estimatedDays} 天',
+                style: TextStyle(
+                  color: palette.foreground,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

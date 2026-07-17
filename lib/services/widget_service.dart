@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:home_widget/home_widget.dart';
+import 'package:nnez_yisu/core/expense_classifier.dart';
+import 'package:nnez_yisu/models/recharge_record.dart';
+import 'package:nnez_yisu/models/transaction_record.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
 
 enum CanteenWidgetTheme { pine, grain, ink }
@@ -51,6 +55,32 @@ class CanteenWidgetSnapshot {
   final int? estimatedDays;
 }
 
+class WidgetActivityRecord {
+  const WidgetActivityRecord({
+    required this.occurredAt,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.isRecharge,
+    required this.category,
+  });
+
+  final String occurredAt;
+  final String title;
+  final String subtitle;
+  final double amount;
+  final bool isRecharge;
+  final ExpenseCategory category;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'title': title,
+    'subtitle': subtitle,
+    'amount': amount.toStringAsFixed(2),
+    'isRecharge': isRecharge,
+    'category': category.name,
+  };
+}
+
 class WidgetService {
   static const _androidWidgetNames = <String>[
     'CanteenWidgetProvider',
@@ -66,6 +96,10 @@ class WidgetService {
     double? monthRecharge,
     int? monthRecordCount,
     String? monthLabel,
+    double? mealAmount,
+    double? drinkAmount,
+    double? snackAmount,
+    List<WidgetActivityRecord>? recentRecords,
     int? estimatedDays,
     bool replaceEstimatedDays = false,
     String? studentName,
@@ -103,6 +137,32 @@ class WidgetService {
       if (monthLabel != null) {
         await HomeWidget.saveWidgetData('widget_month_label', monthLabel);
       }
+      if (mealAmount != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_meal_amount',
+          mealAmount.toStringAsFixed(2),
+        );
+      }
+      if (drinkAmount != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_drink_amount',
+          drinkAmount.toStringAsFixed(2),
+        );
+      }
+      if (snackAmount != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_snack_amount',
+          snackAmount.toStringAsFixed(2),
+        );
+      }
+      if (recentRecords != null) {
+        await HomeWidget.saveWidgetData(
+          'widget_recent_records',
+          jsonEncode(
+            recentRecords.take(4).map((record) => record.toJson()).toList(),
+          ),
+        );
+      }
       if (estimatedDays != null) {
         await HomeWidget.saveWidgetData('widget_estimated_days', estimatedDays);
       } else if (replaceEstimatedDays) {
@@ -130,6 +190,112 @@ class WidgetService {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  static Future<void> updateFromData({
+    required double balance,
+    required Map<String, List<TransactionRecord>> transactionsByMonth,
+    required Map<String, List<RechargeRecord>> rechargesByMonth,
+    required int? estimatedDays,
+    String? studentName,
+    DateTime? updatedAt,
+  }) {
+    final now = DateTime.now();
+    final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final todayKey = '$monthKey-${now.day.toString().padLeft(2, '0')}';
+    final monthTransactions = transactionsByMonth[monthKey] ?? const [];
+    final monthRecharges = rechargesByMonth[monthKey] ?? const [];
+    final todaySpend = monthTransactions
+        .where((transaction) => transaction.occurredDay == todayKey)
+        .fold<double>(0, (sum, transaction) => sum + transaction.amount.abs());
+    final categoryTotals = <ExpenseCategory, double>{
+      ExpenseCategory.meal: 0,
+      ExpenseCategory.drink: 0,
+      ExpenseCategory.snack: 0,
+    };
+    for (final transaction in monthTransactions) {
+      final category = ExpenseClassifier.classify(
+        transaction.itemName,
+      ).category;
+      if (categoryTotals.containsKey(category)) {
+        categoryTotals[category] =
+            (categoryTotals[category] ?? 0) + transaction.amount.abs();
+      }
+    }
+    final recentRecords = <WidgetActivityRecord>[
+      for (final transaction in transactionsByMonth.values.expand(
+        (rows) => rows,
+      ))
+        WidgetActivityRecord(
+          occurredAt: transaction.occurredAt,
+          title: transaction.itemName,
+          subtitle: _formatActivityTime(
+            transaction.occurredDay,
+            transaction.occurredAt,
+          ),
+          amount: transaction.amount.abs(),
+          isRecharge: false,
+          category: ExpenseClassifier.classify(transaction.itemName).category,
+        ),
+      for (final recharge in rechargesByMonth.values.expand((rows) => rows))
+        WidgetActivityRecord(
+          occurredAt: recharge.occurredAt,
+          title: recharge.channel.isEmpty ? '校园卡充值' : recharge.channel,
+          subtitle: _formatActivityTime(
+            recharge.occurredDay,
+            recharge.occurredAt,
+          ),
+          amount: recharge.amount.abs(),
+          isRecharge: true,
+          category: ExpenseCategory.unknown,
+        ),
+    ]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+
+    return updateWidget(
+      balance: balance,
+      todaySpend: todaySpend,
+      monthExpense: monthTransactions.fold<double>(
+        0,
+        (sum, transaction) => sum + transaction.amount.abs(),
+      ),
+      monthRecharge: monthRecharges.fold<double>(
+        0,
+        (sum, recharge) => sum + recharge.amount.abs(),
+      ),
+      monthRecordCount: monthTransactions.length + monthRecharges.length,
+      monthLabel: '${now.year}年${now.month}月记录',
+      mealAmount: categoryTotals[ExpenseCategory.meal] ?? 0,
+      drinkAmount: categoryTotals[ExpenseCategory.drink] ?? 0,
+      snackAmount: categoryTotals[ExpenseCategory.snack] ?? 0,
+      recentRecords: recentRecords,
+      estimatedDays: estimatedDays,
+      replaceEstimatedDays: true,
+      studentName: studentName,
+      updatedAt: updatedAt,
+    );
+  }
+
+  static int? estimateDays(
+    double? balance,
+    Map<String, List<TransactionRecord>> transactionsByMonth,
+  ) {
+    if (balance == null || balance <= 0) return null;
+    final now = DateTime.now();
+    final lastMonth = DateTime(now.year, now.month - 1, 1);
+    final lastMonthKey =
+        '${lastMonth.year}-${lastMonth.month.toString().padLeft(2, '0')}';
+    final rows = transactionsByMonth[lastMonthKey];
+    if (rows == null || rows.isEmpty) return null;
+    final dailyTotals = <String, double>{};
+    for (final transaction in rows) {
+      dailyTotals[transaction.occurredDay] =
+          (dailyTotals[transaction.occurredDay] ?? 0) +
+          transaction.amount.abs();
+    }
+    if (dailyTotals.isEmpty) return null;
+    final total = dailyTotals.values.fold<double>(0, (a, b) => a + b);
+    final average = total / dailyTotals.length;
+    return average <= 0 ? null : (balance / average).floor();
   }
 
   static Future<CanteenWidgetPreferences> loadPreferences() async {
@@ -240,5 +406,15 @@ class WidgetService {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '${value.month}月${value.day}日 $hour:$minute';
+  }
+
+  static String _formatActivityTime(String occurredDay, String occurredAt) {
+    final day = occurredDay.length >= 10
+        ? occurredDay.substring(5).replaceFirst('-', '/')
+        : '--/--';
+    final time = occurredAt.length >= 16
+        ? occurredAt.substring(11, 16)
+        : '--:--';
+    return '$day $time';
   }
 }

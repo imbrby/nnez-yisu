@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:nnez_yisu/core/expense_classifier.dart';
+import 'package:nnez_yisu/core/expense_visual_style.dart';
 import 'package:nnez_yisu/core/time_utils.dart';
 import 'package:nnez_yisu/models/monthly_summary.dart';
 import 'package:nnez_yisu/models/recharge_record.dart';
@@ -54,6 +56,7 @@ class HomePage extends StatelessWidget {
           title: txn.itemName,
           amount: txn.amount,
           isRecharge: false,
+          expenseCategory: ExpenseClassifier.classify(txn.itemName).category,
         ),
       );
     }
@@ -65,6 +68,7 @@ class HomePage extends StatelessWidget {
           title: r.channel.isNotEmpty ? r.channel : '充值',
           amount: r.amount,
           isRecharge: true,
+          expenseCategory: null,
         ),
       );
     }
@@ -398,12 +402,14 @@ class _ActivityItem {
     required this.title,
     required this.amount,
     required this.isRecharge,
+    required this.expenseCategory,
   });
   final String occurredAt;
   final String occurredDay;
   final String title;
   final double amount;
   final bool isRecharge;
+  final ExpenseCategory? expenseCategory;
 }
 
 class _ActivityTile extends StatelessWidget {
@@ -415,6 +421,11 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final visualStyle = ExpenseVisualStyles.resolve(
+      colorScheme: colorScheme,
+      category: item.expenseCategory,
+      isRecharge: item.isRecharge,
+    );
     final time = item.occurredAt.length >= 16
         ? item.occurredAt.substring(11, 16)
         : '';
@@ -430,19 +441,13 @@ class _ActivityTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: item.isRecharge
-                  ? colorScheme.tertiaryContainer
-                  : colorScheme.secondaryContainer,
+              color: visualStyle.backgroundColor,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              item.isRecharge
-                  ? Icons.add_circle_outline
-                  : Icons.restaurant_outlined,
+              visualStyle.icon,
               size: 18,
-              color: item.isRecharge
-                  ? colorScheme.onTertiaryContainer
-                  : colorScheme.onSecondaryContainer,
+              color: visualStyle.iconColor,
             ),
           ),
           const SizedBox(width: 12),
