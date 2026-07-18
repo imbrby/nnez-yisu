@@ -1017,7 +1017,6 @@ class _UpdateDownloadBannerCard extends StatelessWidget {
                     label: const Text('重试'),
                   ),
                 IconButton(
-                  tooltip: '关闭',
                   onPressed: service.dismissDownloadBanner,
                   icon: const Icon(Icons.close),
                 ),

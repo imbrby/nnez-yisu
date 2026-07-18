@@ -68,6 +68,12 @@ class AppNotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clear() {
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
+    _current = null;
+  }
+
   void _show(
     String title,
     String message,
@@ -93,8 +99,19 @@ class AppNotificationService extends ChangeNotifier {
   }
 }
 
-class AppNotificationHost extends StatelessWidget {
+class AppNotificationHost extends StatefulWidget {
   const AppNotificationHost({super.key});
+
+  @override
+  State<AppNotificationHost> createState() => _AppNotificationHostState();
+}
+
+class _AppNotificationHostState extends State<AppNotificationHost> {
+  @override
+  void dispose() {
+    AppNotificationService.instance.clear();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +241,6 @@ class _AppNotificationBanner extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: '关闭',
                 onPressed: AppNotificationService.instance.dismiss,
                 icon: const Icon(Icons.close),
               ),
