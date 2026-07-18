@@ -1,7 +1,7 @@
 name: nnez_yisu
 description: A Flutter canteen card assistant for NNEZ.
 publish_to: 'none'
-version: 2.4.0+202607181
+version: 2.4.1+202607182
 
 environment:
   sdk: ^3.10.8
@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
   file_picker: ^8.1.7
   home_widget: ^0.7.0
   intl: ^0.20.2
@@ -17,7 +16,6 @@ dependencies:
   package_info_plus: ^8.1.3
   path: ^1.9.1
   path_provider: ^2.1.5
-  share_plus: ^10.1.4
   shared_preferences: ^2.5.3
   sqflite: ^2.4.2
   sqflite_common_ffi: ^2.3.6

@@ -55,6 +55,16 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+
+    packaging {
+        jniLibs {
+            // sqflite_common_ffi is used by Windows only; Android uses sqflite.
+            excludes += "**/libsqlite3.*.so"
+            excludes += "**/x86/**"
+            excludes += "**/x86_64/**"
+            excludes += "**/armeabi-v7a/**"
+        }
+    }
 }
 
 flutter {

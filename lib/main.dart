@@ -135,6 +135,8 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
+enum _RefreshFeedback { idle, success, failure }
+
 class _AppShellState extends State<AppShell> {
   final TextEditingController _sidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -145,7 +147,9 @@ class _AppShellState extends State<AppShell> {
   bool _syncing = false;
   bool _settingUp = false;
   Timer? _autoSyncTimer;
+  Timer? _refreshFeedbackTimer;
   bool _autoUpdateChecked = false;
+  _RefreshFeedback _refreshFeedback = _RefreshFeedback.idle;
   int _tabIndex = 0;
   final Map<String, List<TransactionRecord>> _transactionsByMonth = {};
   final Map<String, List<RechargeRecord>> _rechargesByMonth = {};
@@ -170,6 +174,7 @@ class _AppShellState extends State<AppShell> {
     _sidController.dispose();
     _passwordController.dispose();
     _autoSyncTimer?.cancel();
+    _refreshFeedbackTimer?.cancel();
     _repository?.close();
     super.dispose();
   }
@@ -260,11 +265,8 @@ class _AppShellState extends State<AppShell> {
     var retry = false;
     setState(() {
       _syncing = true;
+      if (manual) _refreshFeedback = _RefreshFeedback.idle;
     });
-    AppNotificationService.instance.showProgress(
-      manual ? '正在手动同步' : '正在自动同步',
-      '正在获取校园卡余额和最近流水...',
-    );
 
     try {
       final transactions = await repo.syncNow();
@@ -290,20 +292,15 @@ class _AppShellState extends State<AppShell> {
               repo.exportToJson,
             )
           : false;
-      AppNotificationService.instance.showSuccess(
-        backupCompleted
-            ? '校园卡数据已同步，并已备份到云端。'
-            : '已获取 ${transactions.length} 条最近流水。',
-        title: '同步完成',
-      );
+      if (manual) _setRefreshFeedback(_RefreshFeedback.success);
       _logInfo('刷新完成，获取到 ${transactions.length} 条流水');
+      if (backupCompleted) {
+        _logInfo('手动同步后的 WebDAV 备份完成');
+      }
     } catch (error, stackTrace) {
       _logError('刷新失败', error, stackTrace);
       if (!mounted) return;
-      AppNotificationService.instance.showError(
-        _formatError(error),
-        title: '同步失败',
-      );
+      if (manual) _setRefreshFeedback(_RefreshFeedback.failure);
       retry = await _showSyncErrorDialog(_formatError(error));
     } finally {
       if (mounted) {
@@ -313,6 +310,25 @@ class _AppShellState extends State<AppShell> {
       }
     }
     if (retry && mounted) unawaited(_syncNow(manual: manual));
+  }
+
+  void _setRefreshFeedback(_RefreshFeedback feedback) {
+    if (!mounted) return;
+    _refreshFeedbackTimer?.cancel();
+    setState(() => _refreshFeedback = feedback);
+    if (feedback == _RefreshFeedback.idle) return;
+    _scheduleRefreshFeedbackReset();
+  }
+
+  void _scheduleRefreshFeedbackReset() {
+    _refreshFeedbackTimer = Timer(const Duration(milliseconds: 2800), () {
+      if (!mounted) return;
+      if (_syncing) {
+        _scheduleRefreshFeedbackReset();
+        return;
+      }
+      setState(() => _refreshFeedback = _RefreshFeedback.idle);
+    });
   }
 
   Future<bool> _showSyncErrorDialog(String message) async {
@@ -830,17 +846,12 @@ class _AppShellState extends State<AppShell> {
                   ],
                 ),
           floatingActionButton: hasCredential && _tabIndex == 0
-              ? FloatingActionButton(
-                  onPressed: _syncing || _settingUp
+              ? _AnimatedRefreshFab(
+                  syncing: _syncing,
+                  feedback: _refreshFeedback,
+                  onPressed: _settingUp || _syncing
                       ? null
                       : () => _syncNow(manual: true),
-                  child: _syncing
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
                 )
               : null,
         ),
@@ -928,6 +939,90 @@ class _AppShellState extends State<AppShell> {
       tag: 'APP',
       error: error,
       stackTrace: stackTrace,
+    );
+  }
+}
+
+class _AnimatedRefreshFab extends StatelessWidget {
+  const _AnimatedRefreshFab({
+    required this.syncing,
+    required this.feedback,
+    required this.onPressed,
+  });
+
+  final bool syncing;
+  final _RefreshFeedback feedback;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final duration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 260);
+    final (icon, label, key) = syncing
+        ? (null, '正在刷新', 'syncing')
+        : switch (feedback) {
+            _RefreshFeedback.success => (
+              Icons.check_rounded,
+              '刷新成功',
+              'success',
+            ),
+            _RefreshFeedback.failure => (
+              Icons.error_outline_rounded,
+              '刷新失败',
+              'failure',
+            ),
+            _RefreshFeedback.idle => (Icons.refresh_rounded, '刷新', 'idle'),
+          };
+    return AnimatedSize(
+      duration: duration,
+      curve: Curves.easeOutQuart,
+      alignment: Alignment.centerRight,
+      child: FloatingActionButton.extended(
+        onPressed: onPressed,
+        icon: SizedBox(
+          width: 22,
+          height: 22,
+          child: AnimatedSwitcher(
+            duration: duration,
+            switchInCurve: Curves.easeOutQuart,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.86, end: 1).animate(animation),
+                child: child,
+              ),
+            ),
+            child: icon == null
+                ? const SizedBox(
+                    key: ValueKey('syncing'),
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(icon, key: ValueKey(key)),
+          ),
+        ),
+        label: AnimatedSwitcher(
+          duration: duration,
+          switchInCurve: Curves.easeOutQuart,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.08, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: Text(label, key: ValueKey(key)),
+        ),
+      ),
     );
   }
 }

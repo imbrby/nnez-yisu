@@ -55,6 +55,18 @@ class WebDavBackupResult {
   final DateTime savedAt;
 }
 
+class WebDavBackupTarget {
+  const WebDavBackupTarget({
+    required this.collectionUri,
+    required this.fileName,
+    required this.fileStem,
+  });
+
+  final Uri collectionUri;
+  final String fileName;
+  final String fileStem;
+}
+
 class WebDavBackupService {
   WebDavBackupService._();
 
@@ -87,7 +99,7 @@ class WebDavBackupService {
   }
 
   Future<void> saveConfig(WebDavConfig config) async {
-    _collectionUri(config.url);
+    resolveTarget(config);
     if (config.username.trim().isEmpty || config.password.isEmpty) {
       throw const FormatException('请输入 WebDAV 用户名和密码。');
     }
@@ -101,22 +113,18 @@ class WebDavBackupService {
 
   Future<void> testConnection(WebDavConfig config) async {
     _validateConfigured(config);
+    final target = resolveTarget(config);
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12);
     try {
-      final response = await _send(
-        client: client,
-        config: config,
-        method: 'PROPFIND',
-        uri: _collectionUri(config.url),
-        headers: const <String, String>{'Depth': '0'},
-      );
-      if (response.statusCode != 200 && response.statusCode != 207) {
-        throw Exception(_statusMessage('连接失败', response.statusCode));
-      }
+      await _ensureCollection(client, config, target.collectionUri);
     } finally {
       client.close(force: true);
     }
+  }
+
+  WebDavBackupTarget resolveTarget(WebDavConfig config, {DateTime? now}) {
+    return _resolveTarget(config, now ?? DateTime.now());
   }
 
   Future<WebDavBackupResult> uploadBackup(
@@ -125,20 +133,20 @@ class WebDavBackupService {
   }) async {
     final activeConfig = config ?? await loadConfig();
     _validateConfigured(activeConfig);
-    final collection = _collectionUri(activeConfig.url);
     final now = DateTime.now();
-    final fileName = activeConfig.mode == WebDavBackupMode.overwrite
-        ? 'yisu_backup.json'
-        : 'yisu_backup_${_fileTimestamp(now)}.json';
+    final target = resolveTarget(activeConfig, now: now);
+    final collection = target.collectionUri;
+    final fileName = target.fileName;
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 15);
     try {
       await _ensureCollection(client, activeConfig, collection);
+      final uploadUri = _childUri(collection, fileName);
       final response = await _send(
         client: client,
         config: activeConfig,
         method: 'PUT',
-        uri: _childUri(collection, fileName),
+        uri: uploadUri,
         body: utf8.encode(jsonContent),
         headers: const <String, String>{
           HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
@@ -148,7 +156,9 @@ class WebDavBackupService {
       if (response.statusCode != 200 &&
           response.statusCode != 201 &&
           response.statusCode != 204) {
-        throw Exception(_statusMessage('备份上传失败', response.statusCode));
+        throw Exception(
+          _statusMessage('备份上传失败', response.statusCode, uri: uploadUri),
+        );
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lastBackupKey, now.toIso8601String());
@@ -183,20 +193,24 @@ class WebDavBackupService {
   Future<String> downloadLatestBackup({WebDavConfig? config}) async {
     final activeConfig = config ?? await loadConfig();
     _validateConfigured(activeConfig);
-    final collection = _collectionUri(activeConfig.url);
+    final target = resolveTarget(activeConfig);
+    final collection = target.collectionUri;
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 15);
     try {
-      final fileName = await _latestFileName(client, activeConfig, collection);
+      final fileName = await _latestFileName(client, activeConfig, target);
+      final downloadUri = _childUri(collection, fileName);
       final response = await _send(
         client: client,
         config: activeConfig,
         method: 'GET',
-        uri: _childUri(collection, fileName),
+        uri: downloadUri,
         timeout: const Duration(seconds: 60),
       );
       if (response.statusCode != 200) {
-        throw Exception(_statusMessage('下载云端备份失败', response.statusCode));
+        throw Exception(
+          _statusMessage('下载云端备份失败', response.statusCode, uri: downloadUri),
+        );
       }
       return response.body;
     } finally {
@@ -218,7 +232,9 @@ class WebDavBackupService {
     );
     if (probe.statusCode == 200 || probe.statusCode == 207) return;
     if (probe.statusCode != 404) {
-      throw Exception(_statusMessage('无法访问 WebDAV 目录', probe.statusCode));
+      throw Exception(
+        _statusMessage('无法访问 WebDAV 目录', probe.statusCode, uri: collection),
+      );
     }
     final parent = _parentCollection(collection);
     if (parent == null) {
@@ -232,7 +248,9 @@ class WebDavBackupService {
       uri: collection,
     );
     if (created.statusCode != 201 && created.statusCode != 405) {
-      throw Exception(_statusMessage('创建 WebDAV 目录失败', created.statusCode));
+      throw Exception(
+        _statusMessage('创建 WebDAV 目录失败', created.statusCode, uri: collection),
+      );
     }
     if (created.statusCode == 405) {
       final verify = await _send(
@@ -243,7 +261,9 @@ class WebDavBackupService {
         headers: const <String, String>{'Depth': '0'},
       );
       if (verify.statusCode != 200 && verify.statusCode != 207) {
-        throw Exception(_statusMessage('无法确认 WebDAV 目录', verify.statusCode));
+        throw Exception(
+          _statusMessage('无法确认 WebDAV 目录', verify.statusCode, uri: collection),
+        );
       }
     }
   }
@@ -251,11 +271,12 @@ class WebDavBackupService {
   Future<String> _latestFileName(
     HttpClient client,
     WebDavConfig config,
-    Uri collection,
+    WebDavBackupTarget target,
   ) async {
     if (config.mode == WebDavBackupMode.overwrite) {
-      return 'yisu_backup.json';
+      return target.fileName;
     }
+    final collection = target.collectionUri;
     final response = await _send(
       client: client,
       config: config,
@@ -264,7 +285,9 @@ class WebDavBackupService {
       headers: const <String, String>{'Depth': '1'},
     );
     if (response.statusCode != 200 && response.statusCode != 207) {
-      throw Exception(_statusMessage('读取云端备份列表失败', response.statusCode));
+      throw Exception(
+        _statusMessage('读取云端备份列表失败', response.statusCode, uri: collection),
+      );
     }
     final names =
         RegExp(
@@ -275,10 +298,10 @@ class WebDavBackupService {
             .allMatches(response.body)
             .map((match) => _decodeXml(match.group(1) ?? ''))
             .map((href) => Uri.tryParse(href)?.pathSegments.lastOrNull ?? '')
-            .map(Uri.decodeComponent)
             .where(
               (name) =>
-                  name.startsWith('yisu_backup_') && name.endsWith('.json'),
+                  name.startsWith('${target.fileStem}_') &&
+                  name.endsWith('.json'),
             )
             .toList()
           ..sort();
@@ -312,11 +335,15 @@ class WebDavBackupService {
     final responseBody = await const Utf8Decoder(
       allowMalformed: true,
     ).bind(response).join().timeout(timeout);
+    AppLogService.instance.info(
+      'WebDAV $method ${uri.path} -> ${response.statusCode}',
+      tag: 'BACKUP',
+    );
     return _WebDavResponse(statusCode: response.statusCode, body: responseBody);
   }
 
-  static Uri _collectionUri(String raw) {
-    final value = raw.trim();
+  static WebDavBackupTarget _resolveTarget(WebDavConfig config, DateTime now) {
+    final value = config.url.trim();
     final parsed = Uri.tryParse(value);
     if (parsed == null ||
         (parsed.scheme != 'http' && parsed.scheme != 'https') ||
@@ -324,10 +351,30 @@ class WebDavBackupService {
         parsed.userInfo.isNotEmpty ||
         parsed.hasQuery ||
         parsed.hasFragment) {
-      throw const FormatException('请输入有效的 HTTP 或 HTTPS WebDAV 目录地址。');
+      throw const FormatException('请输入有效的 HTTP 或 HTTPS WebDAV 地址。');
     }
-    final path = parsed.path.endsWith('/') ? parsed.path : '${parsed.path}/';
-    return parsed.replace(path: path);
+    final segments = parsed.pathSegments
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    final explicitFile =
+        segments.isNotEmpty && segments.last.toLowerCase().endsWith('.json');
+    final explicitName = explicitFile ? segments.removeLast() : null;
+    final collection = parsed.replace(pathSegments: <String>[...segments, '']);
+    final explicitStem = explicitName
+        ?.substring(0, explicitName.length - 5)
+        .trim();
+    final fileStem = explicitStem == null || explicitStem.isEmpty
+        ? 'yisu_backup'
+        : explicitStem;
+    final fileName = switch (config.mode) {
+      WebDavBackupMode.overwrite => explicitName ?? '$fileStem.json',
+      WebDavBackupMode.createNew => '${fileStem}_${_fileTimestamp(now)}.json',
+    };
+    return WebDavBackupTarget(
+      collectionUri: collection,
+      fileName: fileName,
+      fileStem: fileStem,
+    );
   }
 
   static Uri _childUri(Uri collection, String fileName) {
@@ -349,7 +396,7 @@ class WebDavBackupService {
   }
 
   static void _validateConfigured(WebDavConfig config) {
-    _collectionUri(config.url);
+    _resolveTarget(config, DateTime.now());
     if (config.username.trim().isEmpty || config.password.isEmpty) {
       throw Exception('请先完成 WebDAV 配置。');
     }
@@ -367,11 +414,14 @@ class WebDavBackupService {
       .replaceAll('&gt;', '>')
       .trim();
 
-  static String _statusMessage(String action, int statusCode) {
+  static String _statusMessage(String action, int statusCode, {Uri? uri}) {
     if (statusCode == 401 || statusCode == 403) {
       return '$action：认证失败，请检查用户名和密码。';
     }
-    if (statusCode == 404) return '$action：目录或文件不存在。';
+    if (statusCode == 404) {
+      final path = uri?.path.isNotEmpty == true ? '（${uri!.path}）' : '';
+      return '$action：服务器未找到该 WebDAV 路径$path。请确认填写的是 WebDAV 地址，而不是网页分享链接。';
+    }
     if (statusCode == 507) return '$action：云端空间不足。';
     return '$action（HTTP $statusCode）。';
   }

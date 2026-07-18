@@ -68,7 +68,7 @@ jobs:
         run: flutter test
 
       - name: Build release APK (arm64 only)
-        run: flutter build apk --release --target-platform android-arm64 --dart-define=APP_UPDATE_REPOSITORY=${{ github.repository }}
+        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols/android --dart-define=APP_UPDATE_REPOSITORY=${{ github.repository }}
 
       - name: Generate version tag
         id: version
@@ -89,6 +89,12 @@ jobs:
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/yisu-*.apk
+
+      - name: Upload Android debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-symbols
+          path: build/symbols/android
 
   build-windows:
     runs-on: windows-latest
@@ -165,12 +171,12 @@ jobs:
           fi
 
           if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
-            gh release upload "$TAG" "$APK_PATH" "$WINDOWS_ZIP_PATH" --repo "$REPO" --clobber
-            gh release edit "$TAG" --repo "$REPO" --title "$RELEASE_NAME"
-          else
-            gh release create "$TAG" "$APK_PATH" "$WINDOWS_ZIP_PATH" \
-              --repo "$REPO" \
-              --title "$RELEASE_NAME" \
-              --target "$COMMIT_SHA" \
-              --generate-notes
+            echo "Release $TAG already exists. Bump pubspec.yaml before publishing."
+            exit 1
           fi
+
+          gh release create "$TAG" "$APK_PATH" "$WINDOWS_ZIP_PATH" \
+            --repo "$REPO" \
+            --title "$RELEASE_NAME" \
+            --target "$COMMIT_SHA" \
+            --generate-notes

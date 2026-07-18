@@ -375,8 +375,8 @@ class _WebDavConfigDialogState extends State<_WebDavConfigDialog> {
               keyboardType: TextInputType.url,
               autocorrect: false,
               decoration: const InputDecoration(
-                labelText: '备份目录地址',
-                hintText: 'https://dav.example.com/一粟/',
+                labelText: 'WebDAV 地址',
+                hintText: 'https://dav.example.com/一粟/ 或 /yisu_backup.json',
                 border: OutlineInputBorder(),
               ),
             ),

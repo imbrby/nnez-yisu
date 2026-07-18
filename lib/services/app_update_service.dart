@@ -845,22 +845,34 @@ class UpdateDownloadBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final enterDuration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 320);
+    final exitDuration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 220);
     return AnimatedBuilder(
       animation: service,
       builder: (context, _) {
         final state = service.downloadState;
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 260),
-          switchInCurve: Curves.easeOutCubic,
+          duration: enterDuration,
+          reverseDuration: exitDuration,
+          switchInCurve: Curves.easeOutQuart,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) => FadeTransition(
             opacity: animation,
             child: SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, -0.12),
+                begin: const Offset(0, -0.08),
                 end: Offset.zero,
               ).animate(animation),
-              child: child,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.985, end: 1).animate(animation),
+                child: child,
+              ),
             ),
           ),
           child: state.phase == UpdateDownloadPhase.idle

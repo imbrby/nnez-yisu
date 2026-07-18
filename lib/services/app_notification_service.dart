@@ -117,15 +117,20 @@ class _AppNotificationHostState extends State<AppNotificationHost> {
   Widget build(BuildContext context) {
     final notifications = AppNotificationService.instance;
     final updates = AppUpdateService.instance;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final enterDuration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 320);
+    final exitDuration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 220);
     return AnimatedBuilder(
       animation: Listenable.merge([notifications, updates]),
       builder: (context, _) {
         final hasUpdate =
             updates.downloadState.phase != UpdateDownloadPhase.idle;
         final notification = notifications.current;
-        if (!hasUpdate && notification == null) {
-          return const SizedBox.shrink();
-        }
         return SafeArea(
           minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           child: Align(
@@ -135,15 +140,44 @@ class _AppNotificationHostState extends State<AppNotificationHost> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (hasUpdate)
-                    UpdateDownloadBanner(
-                      service: updates,
-                      applySafeArea: false,
-                    ),
+                  UpdateDownloadBanner(service: updates, applySafeArea: false),
                   if (hasUpdate && notification != null)
                     const SizedBox(height: 8),
-                  if (notification != null)
-                    _AppNotificationBanner(notification: notification),
+                  AnimatedSwitcher(
+                    duration: enterDuration,
+                    reverseDuration: exitDuration,
+                    switchInCurve: Curves.easeOutQuart,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (currentChild, previousChildren) => Stack(
+                      alignment: Alignment.topCenter,
+                      children: [...previousChildren, ?currentChild],
+                    ),
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, -0.08),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: ScaleTransition(
+                          scale: Tween<double>(
+                            begin: 0.985,
+                            end: 1,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                    ),
+                    child: notification == null
+                        ? const SizedBox.shrink(
+                            key: ValueKey('notification-idle'),
+                          )
+                        : _AppNotificationBanner(
+                            key: const ValueKey('notification-visible'),
+                            notification: notification,
+                            duration: enterDuration,
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -155,9 +189,14 @@ class _AppNotificationHostState extends State<AppNotificationHost> {
 }
 
 class _AppNotificationBanner extends StatelessWidget {
-  const _AppNotificationBanner({required this.notification});
+  const _AppNotificationBanner({
+    super.key,
+    required this.notification,
+    required this.duration,
+  });
 
   final AppNotification notification;
+  final Duration duration;
 
   @override
   Widget build(BuildContext context) {
@@ -198,14 +237,26 @@ class _AppNotificationBanner extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
+              AnimatedContainer(
+                duration: duration,
+                curve: Curves.easeOutQuart,
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
                   color: iconBackground,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: iconColor, size: 21),
+                child: AnimatedSwitcher(
+                  duration: duration,
+                  switchInCurve: Curves.easeOutQuart,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: Icon(
+                    icon,
+                    key: ValueKey(icon),
+                    color: iconColor,
+                    size: 21,
+                  ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -213,30 +264,49 @@ class _AppNotificationBanner extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      notification.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                    AnimatedSwitcher(
+                      duration: duration,
+                      switchInCurve: Curves.easeOutQuart,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: Text(
+                        notification.title,
+                        key: ValueKey(notification.title),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      notification.message,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                    AnimatedSwitcher(
+                      duration: duration,
+                      switchInCurve: Curves.easeOutQuart,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: Text(
+                        notification.message,
+                        key: ValueKey(notification.message),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                    if (notification.showProgress) ...[
-                      const SizedBox(height: 9),
-                      LinearProgressIndicator(
-                        minHeight: 5,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ],
+                    AnimatedSize(
+                      duration: duration,
+                      curve: Curves.easeOutQuart,
+                      alignment: Alignment.topCenter,
+                      child: notification.showProgress
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 9),
+                              child: LinearProgressIndicator(
+                                minHeight: 5,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                   ],
                 ),
               ),
