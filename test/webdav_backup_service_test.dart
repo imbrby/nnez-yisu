@@ -14,9 +14,34 @@ void main() {
 
       expect(
         target.collectionUri.toString(),
-        'https://example.com/dav/%E4%B8%80%E7%B2%9F/',
+        'https://example.com/dav/%E4%B8%80%E7%B2%9F/yisu/',
       );
       expect(target.fileName, 'yisu_backup.json');
+    });
+
+    test('creates an app-owned yisu directory below a WebDAV root', () {
+      const config = WebDavConfig(
+        url: 'https://example.com/dav/',
+        username: 'user',
+        password: 'password',
+      );
+
+      final target = WebDavBackupService.instance.resolveTarget(config);
+
+      expect(target.collectionUri.toString(), 'https://example.com/dav/yisu/');
+      expect(target.fileName, 'yisu_backup.json');
+    });
+
+    test('does not append the yisu directory twice', () {
+      const config = WebDavConfig(
+        url: 'https://example.com/dav/yisu/',
+        username: 'user',
+        password: 'password',
+      );
+
+      final target = WebDavBackupService.instance.resolveTarget(config);
+
+      expect(target.collectionUri.toString(), 'https://example.com/dav/yisu/');
     });
 
     test('accepts an explicit JSON file URL', () {

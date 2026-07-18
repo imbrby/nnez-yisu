@@ -359,6 +359,10 @@ class WebDavBackupService {
     final explicitFile =
         segments.isNotEmpty && segments.last.toLowerCase().endsWith('.json');
     final explicitName = explicitFile ? segments.removeLast() : null;
+    if (!explicitFile &&
+        (segments.isEmpty || segments.last.toLowerCase() != 'yisu')) {
+      segments.add('yisu');
+    }
     final collection = parsed.replace(pathSegments: <String>[...segments, '']);
     final explicitStem = explicitName
         ?.substring(0, explicitName.length - 5)

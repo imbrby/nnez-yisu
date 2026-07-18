@@ -960,7 +960,7 @@ class _AnimatedRefreshFab extends StatelessWidget {
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final duration = reduceMotion
         ? Duration.zero
-        : const Duration(milliseconds: 260);
+        : const Duration(milliseconds: 280);
     final (icon, label, key) = syncing
         ? (null, '正在刷新', 'syncing')
         : switch (feedback) {
@@ -974,53 +974,88 @@ class _AnimatedRefreshFab extends StatelessWidget {
               '刷新失败',
               'failure',
             ),
-            _RefreshFeedback.idle => (Icons.refresh_rounded, '刷新', 'idle'),
+            _RefreshFeedback.idle => (Icons.refresh_rounded, '', 'idle'),
           };
-    return AnimatedSize(
-      duration: duration,
-      curve: Curves.easeOutQuart,
-      alignment: Alignment.centerRight,
-      child: FloatingActionButton.extended(
-        onPressed: onPressed,
-        icon: SizedBox(
-          width: 22,
-          height: 22,
-          child: AnimatedSwitcher(
-            duration: duration,
-            switchInCurve: Curves.easeOutQuart,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.86, end: 1).animate(animation),
-                child: child,
+    final expanded = syncing || feedback != _RefreshFeedback.idle;
+    final colorScheme = Theme.of(context).colorScheme;
+    final fabTheme = Theme.of(context).floatingActionButtonTheme;
+    final backgroundColor =
+        fabTheme.backgroundColor ?? colorScheme.primaryContainer;
+    final foregroundColor =
+        fabTheme.foregroundColor ?? colorScheme.onPrimaryContainer;
+    final content = expanded
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 21,
+                height: 21,
+                child: icon == null
+                    ? CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: foregroundColor,
+                      )
+                    : Icon(icon, size: 22),
+              ),
+              const SizedBox(width: 9),
+              Text(label),
+            ],
+          )
+        : const Icon(Icons.refresh_rounded);
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: expanded ? label : '刷新',
+      child: AnimatedContainer(
+        width: expanded ? 126 : 56,
+        height: 56,
+        duration: duration,
+        curve: Curves.easeOutQuart,
+        child: Material(
+          elevation: fabTheme.elevation ?? 6,
+          color: backgroundColor,
+          shadowColor: colorScheme.shadow.withValues(alpha: 0.32),
+          shape: const StadiumBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            customBorder: const StadiumBorder(),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 190),
+                switchInCurve: Curves.easeOutQuart,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  alignment: Alignment.center,
+                  children: [...previousChildren, ?currentChild],
+                ),
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.94,
+                      end: 1,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: DefaultTextStyle(
+                  key: ValueKey(key),
+                  style:
+                      (Theme.of(context).textTheme.labelLarge ??
+                              const TextStyle())
+                          .copyWith(color: foregroundColor),
+                  child: IconTheme(
+                    data: IconThemeData(color: foregroundColor),
+                    child: content,
+                  ),
+                ),
               ),
             ),
-            child: icon == null
-                ? const SizedBox(
-                    key: ValueKey('syncing'),
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(icon, key: ValueKey(key)),
           ),
-        ),
-        label: AnimatedSwitcher(
-          duration: duration,
-          switchInCurve: Curves.easeOutQuart,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.08, 0),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
-          ),
-          child: Text(label, key: ValueKey(key)),
         ),
       ),
     );
