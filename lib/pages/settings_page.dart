@@ -5,6 +5,7 @@ import 'package:nnez_yisu/pages/account_operation_page.dart';
 import 'package:nnez_yisu/pages/app_theme_settings_page.dart';
 import 'package:nnez_yisu/pages/data_management_page.dart';
 import 'package:nnez_yisu/pages/widget_settings_page.dart';
+import 'package:nnez_yisu/services/canteen_repository.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -14,6 +15,9 @@ class SettingsPage extends StatelessWidget {
     required this.onLogout,
     required this.onExport,
     required this.onImport,
+    required this.onCreateBackupJson,
+    required this.onMergeCloudBackup,
+    required this.onCloudDataChanged,
     required this.onReportLoss,
     required this.onCancelLoss,
     required this.usesCustomBaseUrl,
@@ -26,6 +30,10 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onExport;
   final VoidCallback onImport;
+  final Future<String> Function() onCreateBackupJson;
+  final Future<BackupMergeResult> Function(String json, {bool apply})
+  onMergeCloudBackup;
+  final Future<void> Function() onCloudDataChanged;
   final Future<String> Function() onReportLoss;
   final Future<String> Function() onCancelLoss;
   final bool usesCustomBaseUrl;
@@ -330,6 +338,9 @@ class SettingsPage extends StatelessWidget {
         builder: (_) => _LazyDataManagementPage(
           onExport: onExport,
           onImport: onImport,
+          onCreateBackupJson: onCreateBackupJson,
+          onMergeCloudBackup: onMergeCloudBackup,
+          onCloudDataChanged: onCloudDataChanged,
           isBusy: isBusy,
         ),
       ),
@@ -538,10 +549,17 @@ class _LazyDataManagementPage extends StatelessWidget {
   const _LazyDataManagementPage({
     required this.onExport,
     required this.onImport,
+    required this.onCreateBackupJson,
+    required this.onMergeCloudBackup,
+    required this.onCloudDataChanged,
     required this.isBusy,
   });
   final VoidCallback onExport;
   final VoidCallback onImport;
+  final Future<String> Function() onCreateBackupJson;
+  final Future<BackupMergeResult> Function(String json, {bool apply})
+  onMergeCloudBackup;
+  final Future<void> Function() onCloudDataChanged;
   final bool isBusy;
 
   @override
@@ -549,6 +567,9 @@ class _LazyDataManagementPage extends StatelessWidget {
     return DataManagementPage(
       onExport: onExport,
       onImport: onImport,
+      onCreateBackupJson: onCreateBackupJson,
+      onMergeCloudBackup: onMergeCloudBackup,
+      onCloudDataChanged: onCloudDataChanged,
       isBusy: isBusy,
     );
   }

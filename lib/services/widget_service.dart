@@ -159,7 +159,7 @@ class WidgetService {
         await HomeWidget.saveWidgetData(
           'widget_recent_records',
           jsonEncode(
-            recentRecords.take(4).map((record) => record.toJson()).toList(),
+            recentRecords.take(8).map((record) => record.toJson()).toList(),
           ),
         );
       }

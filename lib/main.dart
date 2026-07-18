@@ -18,6 +18,7 @@ import 'package:nnez_yisu/services/canteen_repository.dart';
 import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:nnez_yisu/services/data_transfer_service.dart';
 import 'package:nnez_yisu/services/widget_service.dart';
+import 'package:nnez_yisu/services/webdav_backup_service.dart';
 import 'package:workmanager/workmanager.dart';
 
 @pragma('vm:entry-point')
@@ -269,6 +270,9 @@ class _AppShellState extends State<AppShell> {
       _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
       // Update home screen widgets
       _updateHomeWidgets(repo, fresh);
+      unawaited(
+        WebDavBackupService.instance.backupIfEnabled(repo.exportToJson),
+      );
       setState(() {
         _status = '刷新成功';
       });
@@ -442,17 +446,7 @@ class _AppShellState extends State<AppShell> {
       setState(() => _status = '正在导入...');
       final count = await repo.importFromJson(jsonString);
       if (!mounted) return;
-      // Reload transactions from SQLite
-      _transactionsByMonth.clear();
-      final fresh = await repo.loadTransactions();
-      _transactionsByMonth.addAll(fresh);
-      _rechargesByMonth.clear();
-      final freshRecharges = await repo.loadRecharges();
-      _rechargesByMonth.addAll(freshRecharges);
-      _profile = repo.profile;
-      _recentRecharges = await repo.loadRecentRecharges();
-      _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
-      _updateHomeWidgets(repo, fresh);
+      await _reloadRepositoryData();
       setState(() => _status = '导入完成，共 $count 条记录');
       _statusClearTimer?.cancel();
       _statusClearTimer = Timer(const Duration(seconds: 3), () {
@@ -463,6 +457,45 @@ class _AppShellState extends State<AppShell> {
       if (!mounted) return;
       setState(() => _status = '导入失败：${_formatError(error)}');
     }
+  }
+
+  Future<String> _createBackupJson() async {
+    final repo = _repository;
+    if (repo == null || !repo.hasCredential) {
+      throw Exception('请先初始化校园卡账号。');
+    }
+    return repo.exportToJson();
+  }
+
+  Future<BackupMergeResult> _mergeCloudBackup(
+    String json, {
+    bool apply = false,
+  }) async {
+    final repo = _repository;
+    if (repo == null || !repo.hasCredential) {
+      throw Exception('请先初始化校园卡账号。');
+    }
+    return repo.mergeMissingFromJson(json, apply: apply);
+  }
+
+  Future<void> _reloadRepositoryData() async {
+    final repo = _repository;
+    if (repo == null) return;
+    final fresh = await repo.loadTransactions();
+    final freshRecharges = await repo.loadRecharges();
+    final recentRecharges = await repo.loadRecentRecharges();
+    if (!mounted) return;
+    _transactionsByMonth
+      ..clear()
+      ..addAll(fresh);
+    _rechargesByMonth
+      ..clear()
+      ..addAll(freshRecharges);
+    _profile = repo.profile;
+    _recentRecharges = recentRecharges;
+    _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
+    _updateHomeWidgets(repo, fresh);
+    setState(() {});
   }
 
   Future<String> _reportLoss() async {
@@ -656,6 +689,9 @@ class _AppShellState extends State<AppShell> {
           onLogout: _logout,
           onExport: _exportData,
           onImport: _importData,
+          onCreateBackupJson: _createBackupJson,
+          onMergeCloudBackup: _mergeCloudBackup,
+          onCloudDataChanged: _reloadRepositoryData,
           onReportLoss: _reportLoss,
           onCancelLoss: _cancelLoss,
           usesCustomBaseUrl: _repository?.usesCustomCampusBaseUrl ?? false,

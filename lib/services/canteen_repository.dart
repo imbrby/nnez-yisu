@@ -9,6 +9,17 @@ import 'package:nnez_yisu/services/campus_api_client.dart';
 import 'package:nnez_yisu/services/local_database_service.dart';
 import 'package:nnez_yisu/services/local_storage_service.dart';
 
+class BackupMergeResult {
+  const BackupMergeResult({
+    required this.transactionCount,
+    required this.rechargeCount,
+  });
+
+  final int transactionCount;
+  final int rechargeCount;
+  int get totalCount => transactionCount + rechargeCount;
+}
+
 class CanteenRepository {
   CanteenRepository._(this._storage, this._db, this._apiClient);
 
@@ -156,6 +167,10 @@ class CanteenRepository {
     );
     final byMonth = <String, List<TransactionRecord>>{};
     for (final txn in rows) {
+      if (txn.occurredDay.length < 7) {
+        _logInfo('skip transaction with invalid day: ${txn.txnId}');
+        continue;
+      }
       final key = txn.occurredDay.substring(0, 7);
       (byMonth[key] ??= []).add(txn);
     }
@@ -186,20 +201,26 @@ class CanteenRepository {
       startDate: '2000-01-01',
       endDate: '2099-12-31',
     );
+    final recharges = await _db.queryRechargesByDayRange(
+      sid: sid,
+      startDate: '2000-01-01',
+      endDate: '2099-12-31',
+    );
     final data = <String, dynamic>{
-      'version': 1,
+      'version': 2,
       'sid': sid,
       'exportedAt': DateTime.now().toIso8601String(),
       if (profileData != null) 'profile': profileData.toJson(),
       'balance': balance,
       'balanceUpdatedAt': balanceUpdatedAt,
       'transactions': rows.map((t) => t.toJson()).toList(),
+      'recharges': recharges.map((recharge) => recharge.toJson()).toList(),
     };
     return jsonEncode(data);
   }
 
   Future<int> importFromJson(String jsonString) async {
-    final data = jsonDecode(jsonString) as Map<String, dynamic>;
+    final data = _decodeBackup(jsonString);
     final sid = currentSid;
     if (sid.isEmpty) throw Exception('请先登录账号再导入数据。');
 
@@ -232,8 +253,94 @@ class CanteenRepository {
     if (records.isNotEmpty) {
       await _db.upsertTransactions(sid, records);
     }
-    _logInfo('importFromJson done: ${records.length} transactions');
-    return records.length;
+    final rechargeList = data['recharges'] as List<dynamic>? ?? const [];
+    final recharges = rechargeList
+        .whereType<Map>()
+        .map(
+          (item) => RechargeRecord.fromJsonMap(Map<String, dynamic>.from(item)),
+        )
+        .map((recharge) => recharge.withSid(sid))
+        .toList();
+    if (recharges.isNotEmpty) {
+      await _db.upsertRecharges(sid, recharges);
+    }
+    _logInfo(
+      'importFromJson done: ${records.length} transactions, '
+      '${recharges.length} recharges',
+    );
+    return records.length + recharges.length;
+  }
+
+  Future<BackupMergeResult> mergeMissingFromJson(
+    String jsonString, {
+    bool apply = false,
+  }) async {
+    final sid = currentSid;
+    if (sid.isEmpty) throw Exception('请先登录账号再比较云端数据。');
+    final data = _decodeBackup(jsonString);
+    final backupSid = (data['sid'] ?? '').toString().trim();
+    if (backupSid.isNotEmpty && backupSid != sid) {
+      throw Exception('云端备份属于其他账号（$backupSid），已停止合并。');
+    }
+
+    final localTransactions = await _db.queryByDayRange(
+      sid: sid,
+      startDate: '2000-01-01',
+      endDate: '2099-12-31',
+    );
+    final localTransactionIds = localTransactions
+        .map((record) => record.txnId)
+        .toSet();
+    final cloudTransactionList =
+        data['transactions'] as List<dynamic>? ?? const [];
+    final missingTransactions = cloudTransactionList
+        .whereType<Map>()
+        .map(
+          (item) =>
+              TransactionRecord.fromJsonMap(Map<String, dynamic>.from(item)),
+        )
+        .where(
+          (record) =>
+              record.txnId.isNotEmpty &&
+              !localTransactionIds.contains(record.txnId),
+        )
+        .map((record) => record.withSid(sid))
+        .toList();
+
+    final localRecharges = await _db.queryRechargesByDayRange(
+      sid: sid,
+      startDate: '2000-01-01',
+      endDate: '2099-12-31',
+    );
+    final localRechargeIds = localRecharges
+        .map((record) => record.orderId)
+        .toSet();
+    final cloudRechargeList = data['recharges'] as List<dynamic>? ?? const [];
+    final missingRecharges = cloudRechargeList
+        .whereType<Map>()
+        .map(
+          (item) => RechargeRecord.fromJsonMap(Map<String, dynamic>.from(item)),
+        )
+        .where(
+          (record) =>
+              record.orderId.isNotEmpty &&
+              !localRechargeIds.contains(record.orderId),
+        )
+        .map((record) => record.withSid(sid))
+        .toList();
+
+    if (apply) {
+      await _db.upsertTransactions(sid, missingTransactions);
+      await _db.upsertRecharges(sid, missingRecharges);
+      _logInfo(
+        'cloud merge applied: ${missingTransactions.length} transactions, '
+        '${missingRecharges.length} recharges',
+      );
+    }
+    return BackupMergeResult(
+      transactionCount: missingTransactions.length,
+      rechargeCount: missingRecharges.length,
+    );
   }
 
   Future<List<RechargeRecord>> loadRecentRecharges({int limit = 20}) async {
@@ -286,6 +393,16 @@ class CanteenRepository {
     await _db.upsertTransactions(sid, stamped);
     await _storage.removeLegacyTransactions();
     _logInfo('legacy transactions migrated: ${stamped.length} rows');
+  }
+
+  static Map<String, dynamic> _decodeBackup(String jsonString) {
+    final decoded = jsonDecode(jsonString);
+    if (decoded is! Map) throw const FormatException('备份文件格式无效。');
+    final data = Map<String, dynamic>.from(decoded);
+    if (data['transactions'] is! List) {
+      throw const FormatException('备份文件缺少消费记录。');
+    }
+    return data;
   }
 
   void _logInfo(String message) {

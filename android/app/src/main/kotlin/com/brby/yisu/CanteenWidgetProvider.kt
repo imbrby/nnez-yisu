@@ -274,12 +274,8 @@ private object CanteenWidgetRenderer {
             readString(prefs, "widget_recent_records", "[]")
         )
         val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-        val availableRows = when {
-            minHeight >= 260 -> 4
-            minHeight >= 205 -> 3
-            minHeight >= 155 -> 2
-            else -> 1
-        }
+        val availableRows = (3 + ((minHeight - 110).coerceAtLeast(0) / 50))
+            .coerceIn(3, 8)
         renderRecentRows(views, records, availableRows, palette)
     }
 
@@ -293,31 +289,51 @@ private object CanteenWidgetRenderer {
             R.id.recent_row_1,
             R.id.recent_row_2,
             R.id.recent_row_3,
-            R.id.recent_row_4
+            R.id.recent_row_4,
+            R.id.recent_row_5,
+            R.id.recent_row_6,
+            R.id.recent_row_7,
+            R.id.recent_row_8
         )
         val iconIds = intArrayOf(
             R.id.recent_icon_1,
             R.id.recent_icon_2,
             R.id.recent_icon_3,
-            R.id.recent_icon_4
+            R.id.recent_icon_4,
+            R.id.recent_icon_5,
+            R.id.recent_icon_6,
+            R.id.recent_icon_7,
+            R.id.recent_icon_8
         )
         val titleIds = intArrayOf(
             R.id.recent_title_1,
             R.id.recent_title_2,
             R.id.recent_title_3,
-            R.id.recent_title_4
+            R.id.recent_title_4,
+            R.id.recent_title_5,
+            R.id.recent_title_6,
+            R.id.recent_title_7,
+            R.id.recent_title_8
         )
         val subtitleIds = intArrayOf(
             R.id.recent_subtitle_1,
             R.id.recent_subtitle_2,
             R.id.recent_subtitle_3,
-            R.id.recent_subtitle_4
+            R.id.recent_subtitle_4,
+            R.id.recent_subtitle_5,
+            R.id.recent_subtitle_6,
+            R.id.recent_subtitle_7,
+            R.id.recent_subtitle_8
         )
         val amountIds = intArrayOf(
             R.id.recent_amount_1,
             R.id.recent_amount_2,
             R.id.recent_amount_3,
-            R.id.recent_amount_4
+            R.id.recent_amount_4,
+            R.id.recent_amount_5,
+            R.id.recent_amount_6,
+            R.id.recent_amount_7,
+            R.id.recent_amount_8
         )
 
         if (records.isEmpty()) {
@@ -401,7 +417,7 @@ private object CanteenWidgetRenderer {
         return try {
             val array = JSONArray(raw)
             val records = mutableListOf<WidgetRecentRecord>()
-            for (index in 0 until minOf(array.length(), 4)) {
+            for (index in 0 until minOf(array.length(), 8)) {
                 val item = array.optJSONObject(index) ?: continue
                 records.add(
                     WidgetRecentRecord(
