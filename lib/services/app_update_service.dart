@@ -102,6 +102,7 @@ class AppUpdateService extends ChangeNotifier {
   List<String> _currentPackageCleanupRefs = const <String>[];
   bool _downloadRunning = false;
   bool _cancelRequested = false;
+  Timer? _bannerDismissTimer;
 
   Future<void> cleanupPendingPackages() async {
     final prefs = await SharedPreferences.getInstance();
@@ -512,6 +513,7 @@ class AppUpdateService extends ChangeNotifier {
 
   void dismissDownloadBanner() {
     if (_downloadRunning) return;
+    _bannerDismissTimer?.cancel();
     _setDownloadState(const UpdateDownloadState());
   }
 
@@ -567,8 +569,22 @@ class AppUpdateService extends ChangeNotifier {
   }
 
   void _setDownloadState(UpdateDownloadState state) {
+    _bannerDismissTimer?.cancel();
     _downloadState = state;
     notifyListeners();
+    final delay = switch (state.phase) {
+      UpdateDownloadPhase.completed => const Duration(seconds: 15),
+      UpdateDownloadPhase.failed => const Duration(seconds: 10),
+      _ => null,
+    };
+    if (delay != null) {
+      _bannerDismissTimer = Timer(delay, () {
+        if (!_downloadRunning && _downloadState.phase == state.phase) {
+          _downloadState = const UpdateDownloadState();
+          notifyListeners();
+        }
+      });
+    }
   }
 
   Future<void> _cleanupCurrentPackage() async {
@@ -818,9 +834,14 @@ class AppUpdateService extends ChangeNotifier {
 }
 
 class UpdateDownloadBanner extends StatelessWidget {
-  const UpdateDownloadBanner({super.key, required this.service});
+  const UpdateDownloadBanner({
+    super.key,
+    required this.service,
+    this.applySafeArea = true,
+  });
 
   final AppUpdateService service;
+  final bool applySafeArea;
 
   @override
   Widget build(BuildContext context) {
@@ -844,22 +865,25 @@ class UpdateDownloadBanner extends StatelessWidget {
           ),
           child: state.phase == UpdateDownloadPhase.idle
               ? const SizedBox.shrink(key: ValueKey('update-idle'))
-              : SafeArea(
-                  key: ValueKey(state.phase),
-                  minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: _UpdateDownloadBannerCard(
-                        state: state,
-                        service: service,
-                      ),
-                    ),
-                  ),
-                ),
+              : _buildBanner(context, state),
         );
       },
+    );
+  }
+
+  Widget _buildBanner(BuildContext context, UpdateDownloadState state) {
+    final banner = Align(
+      key: ValueKey(state.phase),
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: _UpdateDownloadBannerCard(state: state, service: service),
+      ),
+    );
+    if (!applySafeArea) return banner;
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: banner,
     );
   }
 }

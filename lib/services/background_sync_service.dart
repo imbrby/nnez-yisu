@@ -1,7 +1,6 @@
 import 'package:nnez_yisu/services/app_log_service.dart';
 import 'package:nnez_yisu/services/canteen_repository.dart';
 import 'package:nnez_yisu/services/widget_service.dart';
-import 'package:nnez_yisu/services/webdav_backup_service.dart';
 
 const backgroundSyncTaskName = 'com.brby.yisu.backgroundSync';
 
@@ -35,8 +34,6 @@ Future<bool> backgroundSyncCallback() async {
       studentName: repository.profile?.studentName,
       updatedAt: DateTime.tryParse(repository.balanceUpdatedAt ?? ''),
     );
-    await WebDavBackupService.instance.backupIfEnabled(repository.exportToJson);
-
     AppLogService.instance.info('background 30-day sync done', tag: 'BG');
     return true;
   } catch (error, stackTrace) {

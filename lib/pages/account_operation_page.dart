@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nnez_yisu/services/app_notification_service.dart';
 
 class AccountOperationPage extends StatefulWidget {
   const AccountOperationPage({
@@ -53,15 +54,13 @@ class _AccountOperationPageState extends State<AccountOperationPage> {
     try {
       final msg = await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(msg.isNotEmpty ? msg : '操作成功')));
+      AppNotificationService.instance.showSuccess(
+        msg.isNotEmpty ? msg : '操作成功',
+      );
     } catch (e) {
       if (!mounted) return;
       final text = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失败：$text')));
+      AppNotificationService.instance.showError('操作失败：$text');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

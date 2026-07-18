@@ -11,6 +11,7 @@ import 'package:nnez_yisu/pages/detail_page.dart';
 import 'package:nnez_yisu/pages/home_page.dart';
 import 'package:nnez_yisu/pages/settings_page.dart';
 import 'package:nnez_yisu/services/app_log_service.dart';
+import 'package:nnez_yisu/services/app_notification_service.dart';
 import 'package:nnez_yisu/services/app_theme_service.dart';
 import 'package:nnez_yisu/services/app_update_service.dart';
 import 'package:nnez_yisu/services/background_sync_service.dart';
@@ -111,6 +112,17 @@ class CanteenApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: themeService.buildTheme(),
         home: const AppShell(),
+        builder: (context, child) => Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AppNotificationHost(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -129,10 +141,9 @@ class _AppShellState extends State<AppShell> {
 
   CanteenRepository? _repository;
   CampusProfile? _profile;
-  String _status = '';
+  String _status = '正在初始化本地数据...';
   bool _syncing = false;
   bool _settingUp = false;
-  Timer? _statusClearTimer;
   Timer? _autoSyncTimer;
   bool _autoUpdateChecked = false;
   int _tabIndex = 0;
@@ -158,7 +169,6 @@ class _AppShellState extends State<AppShell> {
   void dispose() {
     _sidController.dispose();
     _passwordController.dispose();
-    _statusClearTimer?.cancel();
     _autoSyncTimer?.cancel();
     _repository?.close();
     super.dispose();
@@ -171,24 +181,23 @@ class _AppShellState extends State<AppShell> {
         const Duration(seconds: 20),
         onTimeout: () => throw TimeoutException('本地数据初始化超时。'),
       );
+      final saved = await repo.loadTransactions();
+      final savedRecharges = await repo.loadRecharges();
+      final recentRecharges = await repo.loadRecentRecharges();
       if (!mounted) return;
       setState(() {
         _repository = repo;
         _profile = repo.profile;
+        _transactionsByMonth
+          ..clear()
+          ..addAll(saved);
+        _rechargesByMonth
+          ..clear()
+          ..addAll(savedRecharges);
+        _recentRecharges = recentRecharges;
+        _estimatedDays = _calcEstimatedDays(repo.balance, saved);
+        _status = '';
       });
-      // Restore persisted transactions from SQLite
-      final saved = await repo.loadTransactions();
-      if (saved.isNotEmpty) {
-        _transactionsByMonth.addAll(saved);
-      }
-      final savedRecharges = await repo.loadRecharges();
-      if (savedRecharges.isNotEmpty) {
-        _rechargesByMonth.addAll(savedRecharges);
-      }
-      // Load recent recharges
-      _recentRecharges = await repo.loadRecentRecharges();
-      // Calculate estimated days
-      _estimatedDays = _calcEstimatedDays(repo.balance, saved);
       _updateHomeWidgets(repo, saved);
       _logInfo('bootstrap 完成，hasCredential=${repo.hasCredential}');
       // Auto-sync if not synced today
@@ -208,6 +217,10 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         _status = 'bootstrap 失败：${_formatError(error)}';
       });
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '启动失败',
+      );
     }
   }
 
@@ -235,7 +248,7 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _syncNow() async {
+  Future<void> _syncNow({bool manual = false}) async {
     _logInfo('syncNow entry settingUp=$_settingUp syncing=$_syncing');
     final repo = _repository;
     if (repo == null || !repo.hasCredential || _settingUp || _syncing) {
@@ -244,12 +257,14 @@ class _AppShellState extends State<AppShell> {
     }
     _logInfo('开始刷新');
 
-    _statusClearTimer?.cancel();
     var retry = false;
     setState(() {
       _syncing = true;
-      _status = '正在刷新...';
     });
+    AppNotificationService.instance.showProgress(
+      manual ? '正在手动同步' : '正在自动同步',
+      '正在获取校园卡余额和最近流水...',
+    );
 
     try {
       final transactions = await repo.syncNow();
@@ -270,21 +285,25 @@ class _AppShellState extends State<AppShell> {
       _estimatedDays = _calcEstimatedDays(repo.balance, fresh);
       // Update home screen widgets
       _updateHomeWidgets(repo, fresh);
-      unawaited(
-        WebDavBackupService.instance.backupIfEnabled(repo.exportToJson),
+      final backupCompleted = manual
+          ? await WebDavBackupService.instance.backupIfEnabled(
+              repo.exportToJson,
+            )
+          : false;
+      AppNotificationService.instance.showSuccess(
+        backupCompleted
+            ? '校园卡数据已同步，并已备份到云端。'
+            : '已获取 ${transactions.length} 条最近流水。',
+        title: '同步完成',
       );
-      setState(() {
-        _status = '刷新成功';
-      });
-      _statusClearTimer?.cancel();
-      _statusClearTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _status = '');
-      });
       _logInfo('刷新完成，获取到 ${transactions.length} 条流水');
     } catch (error, stackTrace) {
       _logError('刷新失败', error, stackTrace);
       if (!mounted) return;
-      setState(() => _status = '');
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '同步失败',
+      );
       retry = await _showSyncErrorDialog(_formatError(error));
     } finally {
       if (mounted) {
@@ -293,7 +312,7 @@ class _AppShellState extends State<AppShell> {
         });
       }
     }
-    if (retry && mounted) unawaited(_syncNow());
+    if (retry && mounted) unawaited(_syncNow(manual: manual));
   }
 
   Future<bool> _showSyncErrorDialog(String message) async {
@@ -368,6 +387,10 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         _status = '初始化完成，请点右下角刷新同步余额';
       });
+      AppNotificationService.instance.showSuccess(
+        '账号已保存，请手动同步一次以获取最新数据。',
+        title: '初始化完成',
+      );
       _logInfo('初始化账号完成');
     } catch (error, stackTrace) {
       _logError('初始化账号失败', error, stackTrace);
@@ -375,6 +398,10 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         _status = '初始化失败：${_formatError(error)}';
       });
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '初始化失败',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -404,6 +431,7 @@ class _AppShellState extends State<AppShell> {
         _recentRecharges = [];
         _estimatedDays = null;
       });
+      AppNotificationService.instance.showSuccess('校园卡账号已从本机退出。', title: '已登出');
       _logInfo('登出完成');
     } catch (error, stackTrace) {
       _logError('登出失败', error, stackTrace);
@@ -411,28 +439,35 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         _status = '登出失败：${_formatError(error)}';
       });
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '登出失败',
+      );
     }
   }
 
   Future<void> _exportData() async {
     final repo = _repository;
     if (repo == null || !repo.hasCredential) return;
-    setState(() => _status = '正在导出...');
+    AppNotificationService.instance.showProgress('正在导出', '正在生成完整本地备份...');
     try {
       final json = await repo.exportToJson();
       final savedPath = await DataTransferService.exportWithSystemFileManager(
         json,
       );
       if (!mounted) return;
-      setState(() => _status = savedPath == null ? '已取消导出' : '导出完成');
-      _statusClearTimer?.cancel();
-      _statusClearTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _status = '');
-      });
+      if (savedPath == null) {
+        AppNotificationService.instance.showInfo('未选择保存位置。', title: '已取消导出');
+      } else {
+        AppNotificationService.instance.showSuccess('完整备份已保存。', title: '导出完成');
+      }
     } catch (error, stackTrace) {
       _logError('导出失败', error, stackTrace);
       if (!mounted) return;
-      setState(() => _status = '导出失败：${_formatError(error)}');
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '导出失败',
+      );
     }
   }
 
@@ -443,19 +478,21 @@ class _AppShellState extends State<AppShell> {
       final jsonString = await DataTransferService.pickAndReadJsonFile();
       if (jsonString == null) return;
       if (!mounted) return;
-      setState(() => _status = '正在导入...');
+      AppNotificationService.instance.showProgress('正在导入', '正在校验并写入备份数据...');
       final count = await repo.importFromJson(jsonString);
       if (!mounted) return;
       await _reloadRepositoryData();
-      setState(() => _status = '导入完成，共 $count 条记录');
-      _statusClearTimer?.cancel();
-      _statusClearTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _status = '');
-      });
+      AppNotificationService.instance.showSuccess(
+        '已导入 $count 条记录。',
+        title: '导入完成',
+      );
     } catch (error, stackTrace) {
       _logError('导入失败', error, stackTrace);
       if (!mounted) return;
-      setState(() => _status = '导入失败：${_formatError(error)}');
+      AppNotificationService.instance.showError(
+        _formatError(error),
+        title: '导入失败',
+      );
     }
   }
 
@@ -793,24 +830,18 @@ class _AppShellState extends State<AppShell> {
                   ],
                 ),
           floatingActionButton: hasCredential && _tabIndex == 0
-              ? _status.isNotEmpty && !_syncing
-                    ? FloatingActionButton.extended(
-                        onPressed: _settingUp ? null : _syncNow,
-                        icon: const Icon(Icons.check),
-                        label: Text(_status),
-                      )
-                    : FloatingActionButton(
-                        onPressed: _syncing || _settingUp ? null : _syncNow,
-                        child: _syncing
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.refresh),
-                      )
+              ? FloatingActionButton(
+                  onPressed: _syncing || _settingUp
+                      ? null
+                      : () => _syncNow(manual: true),
+                  child: _syncing
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                )
               : null,
         ),
         if (!hasCredential)
@@ -883,12 +914,6 @@ class _AppShellState extends State<AppShell> {
               ),
             ),
           ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: UpdateDownloadBanner(service: AppUpdateService.instance),
-        ),
       ],
     );
   }

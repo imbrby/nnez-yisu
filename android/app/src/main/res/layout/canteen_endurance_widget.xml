@@ -6,24 +6,40 @@
     android:background="@drawable/widget_background"
     android:orientation="vertical"
     android:paddingStart="8dp"
-    android:paddingTop="10dp"
+    android:paddingTop="5dp"
     android:paddingEnd="8dp"
-    android:paddingBottom="10dp">
+    android:paddingBottom="5dp">
 
-    <TextView
-        android:id="@+id/tv_category_title"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:text="地点分类"
-        android:textColor="#FF174F43"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tv_category_accent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="●"
+            android:textColor="#FFC99B3C"
+            android:textSize="7sp" />
+
+        <TextView
+            android:id="@+id/tv_category_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:fontFamily="sans-serif"
+            android:text="地点分类"
+            android:textColor="#FF174F43"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="3dp"
         android:layout_weight="1"
         android:baselineAligned="false"
         android:orientation="horizontal">
@@ -36,24 +52,14 @@
             android:background="@drawable/widget_category_pine_meal"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="3dp">
+            android:padding="2dp">
 
             <ImageView
                 android:id="@+id/category_meal_icon"
-                android:layout_width="17dp"
-                android:layout_height="17dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="正餐"
                 android:src="@drawable/ic_widget_meal" />
-
-            <TextView
-                android:id="@+id/category_meal_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="正餐"
-                android:textColor="#FF174F43"
-                android:textSize="9sp"
-                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/category_meal_amount"
@@ -64,7 +70,7 @@
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="#FF174F43"
-                android:textSize="9sp"
+                android:textSize="8sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -77,24 +83,14 @@
             android:background="@drawable/widget_category_pine_drink"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="3dp">
+            android:padding="2dp">
 
             <ImageView
                 android:id="@+id/category_drink_icon"
-                android:layout_width="17dp"
-                android:layout_height="17dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="饮品"
                 android:src="@drawable/ic_widget_drink" />
-
-            <TextView
-                android:id="@+id/category_drink_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="饮品"
-                android:textColor="#FF8A651A"
-                android:textSize="9sp"
-                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/category_drink_amount"
@@ -105,7 +101,7 @@
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="#FF8A651A"
-                android:textSize="9sp"
+                android:textSize="8sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -118,24 +114,14 @@
             android:background="@drawable/widget_category_pine_snack"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="3dp">
+            android:padding="2dp">
 
             <ImageView
                 android:id="@+id/category_snack_icon"
-                android:layout_width="17dp"
-                android:layout_height="17dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="小吃"
                 android:src="@drawable/ic_widget_snack" />
-
-            <TextView
-                android:id="@+id/category_snack_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="小吃"
-                android:textColor="#FF9A5A32"
-                android:textSize="9sp"
-                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/category_snack_amount"
@@ -146,7 +132,7 @@
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="#FF9A5A32"
-                android:textSize="9sp"
+                android:textSize="8sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>

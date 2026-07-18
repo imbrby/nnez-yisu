@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nnez_yisu/services/app_notification_service.dart';
 import 'package:nnez_yisu/services/canteen_repository.dart';
 import 'package:nnez_yisu/services/webdav_backup_service.dart';
 
@@ -130,8 +131,8 @@ class _DataManagementPageState extends State<DataManagementPage> {
                 const Divider(height: 1, indent: 56),
                 SwitchListTile(
                   secondary: Icon(Icons.autorenew, color: colorScheme.primary),
-                  title: const Text('同步后自动备份'),
-                  subtitle: const Text('备份失败不会影响校园卡数据同步'),
+                  title: const Text('手动同步后自动备份'),
+                  subtitle: const Text('仅点击首页同步按钮时执行，自动同步不会触发备份'),
                   value: config?.autoBackupEnabled ?? false,
                   onChanged: _busy ? null : _toggleAutoBackup,
                 ),
@@ -205,7 +206,7 @@ class _DataManagementPageState extends State<DataManagementPage> {
       await _configure();
       return;
     }
-    await _run(enabled ? '已开启自动备份' : '已关闭自动备份', () async {
+    await _run(enabled ? '已开启手动同步后备份' : '已关闭手动同步后备份', () async {
       await _webDav.saveConfig(config.copyWith(autoBackupEnabled: enabled));
       await _loadConfig();
     });
@@ -228,6 +229,10 @@ class _DataManagementPageState extends State<DataManagementPage> {
 
   Future<void> _compareAndMerge() async {
     setState(() => _operating = true);
+    AppNotificationService.instance.showProgress(
+      '正在比较云端备份',
+      '正在读取云端文件并检查本地缺失记录...',
+    );
     try {
       final cloudJson = await _webDav.downloadLatestBackup(config: _config);
       final preview = await widget.onMergeCloudBackup(cloudJson, apply: false);
@@ -288,6 +293,7 @@ class _DataManagementPageState extends State<DataManagementPage> {
     bool showSuccess = true,
   }) async {
     setState(() => _operating = true);
+    AppNotificationService.instance.showProgress('正在处理', '请稍候，操作完成后会自动提示。');
     try {
       await action();
       if (mounted && showSuccess) _showMessage(successMessage);
@@ -299,9 +305,7 @@ class _DataManagementPageState extends State<DataManagementPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    AppNotificationService.instance.showSuccess(message);
   }
 
   void _showError(Object error) {
@@ -309,8 +313,8 @@ class _DataManagementPageState extends State<DataManagementPage> {
         .toString()
         .replaceFirst(RegExp(r'^(?:Format)?Exception:\s*'), '')
         .trim();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.isEmpty ? '操作失败，请稍后重试。' : message)),
+    AppNotificationService.instance.showError(
+      message.isEmpty ? '操作失败，请稍后重试。' : message,
     );
   }
 
@@ -436,7 +440,8 @@ class _WebDavConfigDialogState extends State<_WebDavConfigDialog> {
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('同步后自动备份'),
+              title: const Text('手动同步后自动备份'),
+              subtitle: const Text('自动同步和后台同步不会触发云端备份'),
               value: _autoBackup,
               onChanged: (value) => setState(() => _autoBackup = value),
             ),

@@ -158,14 +158,15 @@ class WebDavBackupService {
     }
   }
 
-  Future<void> backupIfEnabled(Future<String> Function() createJson) async {
-    if (_automaticBackupRunning) return;
+  Future<bool> backupIfEnabled(Future<String> Function() createJson) async {
+    if (_automaticBackupRunning) return false;
     final config = await loadConfig();
-    if (!config.autoBackupEnabled || !config.isConfigured) return;
+    if (!config.autoBackupEnabled || !config.isConfigured) return false;
     _automaticBackupRunning = true;
     try {
       await uploadBackup(await createJson(), config: config);
       AppLogService.instance.info('WebDAV auto backup done', tag: 'BACKUP');
+      return true;
     } catch (error, stackTrace) {
       AppLogService.instance.error(
         'WebDAV auto backup failed',
@@ -173,6 +174,7 @@ class WebDavBackupService {
         error: error,
         stackTrace: stackTrace,
       );
+      return false;
     } finally {
       _automaticBackupRunning = false;
     }
@@ -218,6 +220,11 @@ class WebDavBackupService {
     if (probe.statusCode != 404) {
       throw Exception(_statusMessage('无法访问 WebDAV 目录', probe.statusCode));
     }
+    final parent = _parentCollection(collection);
+    if (parent == null) {
+      throw Exception('无法访问 WebDAV 服务根目录，请检查备份目录地址。');
+    }
+    await _ensureCollection(client, config, parent);
     final created = await _send(
       client: client,
       config: config,
@@ -226,6 +233,18 @@ class WebDavBackupService {
     );
     if (created.statusCode != 201 && created.statusCode != 405) {
       throw Exception(_statusMessage('创建 WebDAV 目录失败', created.statusCode));
+    }
+    if (created.statusCode == 405) {
+      final verify = await _send(
+        client: client,
+        config: config,
+        method: 'PROPFIND',
+        uri: collection,
+        headers: const <String, String>{'Depth': '0'},
+      );
+      if (verify.statusCode != 200 && verify.statusCode != 207) {
+        throw Exception(_statusMessage('无法确认 WebDAV 目录', verify.statusCode));
+      }
     }
   }
 
@@ -318,6 +337,15 @@ class WebDavBackupService {
         fileName,
       ],
     );
+  }
+
+  static Uri? _parentCollection(Uri collection) {
+    final segments = collection.pathSegments
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return null;
+    segments.removeLast();
+    return collection.replace(pathSegments: <String>[...segments, '']);
   }
 
   static void _validateConfigured(WebDavConfig config) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nnez_yisu/services/app_notification_service.dart';
 import 'package:nnez_yisu/services/widget_service.dart';
 
 class WidgetSettingsPage extends StatefulWidget {
@@ -139,14 +140,14 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
                 const Divider(height: 1),
                 _WidgetKindRow(
                   title: '消费统计',
-                  description: '4 × 2 起 · 统计与最近余额变动，可纵向拉伸',
+                  description: '初始 4 × 2 · 可缩至 3 列，并可纵向拉伸',
                   icon: Icons.receipt_long_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.overview),
                 ),
                 const Divider(height: 1),
                 _WidgetKindRow(
                   title: '地点分类',
-                  description: '2 × 2 · 正餐、饮品和小吃消费',
+                  description: '2 × 1 · 正餐、饮品和小吃消费',
                   icon: Icons.category_outlined,
                   onAdd: () => _pin(CanteenWidgetKind.endurance),
                 ),
@@ -164,9 +165,7 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
       await WidgetService.savePreferences(preferences);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('保存小组件设置失败：$error')));
+      AppNotificationService.instance.showError('保存小组件设置失败：$error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -174,9 +173,7 @@ class _WidgetSettingsPageState extends State<WidgetSettingsPage> {
 
   Future<void> _pin(CanteenWidgetKind kind) async {
     if (!_canPin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前桌面不支持一键添加，请长按桌面后从组件列表添加。')),
-      );
+      AppNotificationService.instance.showInfo('当前桌面不支持一键添加，请长按桌面后从组件列表添加。');
       return;
     }
     await WidgetService.requestPin(kind);

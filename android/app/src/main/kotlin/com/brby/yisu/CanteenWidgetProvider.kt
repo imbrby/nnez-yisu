@@ -175,41 +175,36 @@ private object CanteenWidgetRenderer {
         prefs: SharedPreferences,
         palette: WidgetPalette
     ) {
+        views.setTextColor(R.id.tv_category_accent, palette.accent)
         views.setTextColor(R.id.tv_category_title, palette.foreground)
         setCategoryTile(
             views,
             R.id.category_meal_tile,
             R.id.category_meal_icon,
-            R.id.category_meal_label,
             R.id.category_meal_amount,
             R.drawable.ic_widget_meal,
             palette.mealBackground,
             palette.meal,
-            "正餐",
             readString(prefs, "widget_meal_amount", "0.00")
         )
         setCategoryTile(
             views,
             R.id.category_drink_tile,
             R.id.category_drink_icon,
-            R.id.category_drink_label,
             R.id.category_drink_amount,
             R.drawable.ic_widget_drink,
             palette.drinkBackground,
             palette.drink,
-            "饮品",
             readString(prefs, "widget_drink_amount", "0.00")
         )
         setCategoryTile(
             views,
             R.id.category_snack_tile,
             R.id.category_snack_icon,
-            R.id.category_snack_label,
             R.id.category_snack_amount,
             R.drawable.ic_widget_snack,
             palette.snackBackground,
             palette.snack,
-            "小吃",
             readString(prefs, "widget_snack_amount", "0.00")
         )
     }
@@ -218,20 +213,16 @@ private object CanteenWidgetRenderer {
         views: RemoteViews,
         tileId: Int,
         iconId: Int,
-        labelId: Int,
         amountId: Int,
         iconResource: Int,
         backgroundResource: Int,
         color: Int,
-        label: String,
         amount: String
     ) {
         views.setInt(tileId, "setBackgroundResource", backgroundResource)
         views.setImageViewResource(iconId, iconResource)
         views.setInt(iconId, "setColorFilter", color)
-        views.setTextViewText(labelId, label)
         views.setTextViewText(amountId, "¥$amount")
-        views.setTextColor(labelId, color)
         views.setTextColor(amountId, color)
     }
 
@@ -274,7 +265,7 @@ private object CanteenWidgetRenderer {
             readString(prefs, "widget_recent_records", "[]")
         )
         val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-        val availableRows = (3 + ((minHeight - 110).coerceAtLeast(0) / 50))
+        val availableRows = (3 + ((minHeight - 110).coerceAtLeast(0) / 32))
             .coerceIn(3, 8)
         renderRecentRows(views, records, availableRows, palette)
     }

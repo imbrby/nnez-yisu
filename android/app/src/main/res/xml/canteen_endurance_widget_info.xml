@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="110dp"
-    android:minHeight="110dp"
+    android:minHeight="60dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="60dp"
     android:updatePeriodMillis="10800000"
     android:initialLayout="@layout/canteen_endurance_widget"
     android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
     android:widgetCategory="home_screen"
     android:description="@string/widget_endurance_description"
     android:previewLayout="@layout/canteen_endurance_widget" />
